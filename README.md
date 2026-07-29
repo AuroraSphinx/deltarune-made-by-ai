@@ -1,88 +1,82 @@
-# DELTA SCRATCH — Chapter 1 LÖVE2D Prototype
+# DELTARUNE From Scratch — Chapter 1
 
-A clean-room, from-scratch LÖVE2D foundation for building a Chapter 1-inspired fan project with a friend.
+This repository is now a **Kristal project**, not a standalone imitation of DELTARUNE's battle system.
 
-This repository currently includes:
+The old hand-written LÖVE battle prototype has been removed. Battles now execute inside the actual Kristal engine and use Kristal's real:
 
-- crisp 320×240 virtual resolution with integer scaling
-- title screen and state management
-- overworld movement and collision rectangles
-- reusable NPC/dialogue system with typewriter text
-- two original test rooms
-- a battle prototype with FIGHT, ACT, SPARE, and FLEE
-- movable red soul, invulnerability frames, HP, and three bullet patterns
-- runtime-generated original placeholder sprites
-- optional external PNG loading with automatic placeholder fallback
+- three-member party action selection
+- character-specific FIGHT / ACT / MAGIC / ITEM / SPARE / DEFEND buttons
+- TP and grazing systems
+- party and enemy target selection
+- queued Kris, Susie, and Ralsei actions
+- attack timing bars
+- enemy dialogue
+- arena, SOUL, Wave, and Bullet systems
+- MERCY, TIRED, Pacify, victory, and battle transitions
+- Kristal crash/error handler and traceback screen
 
-## Run it
+The project currently boots directly into a small training encounter so the real battle flow can be tested immediately.
 
-Install [LÖVE 11.5](https://love2d.org/) and run this folder:
+## Run on Windows
+
+Requirements:
+
+- Git for Windows
+- LÖVE 11.x
+
+Double-click:
+
+```text
+run-kristal.bat
+```
+
+The launcher will:
+
+1. clone the official Kristal repository into `.kristal-engine` if needed;
+2. update the local Kristal checkout;
+3. create a junction from Kristal's `mods` directory to this project;
+4. launch Kristal with this project selected.
+
+## Run manually
+
+Clone Kristal, then place this repository inside its `mods` directory using the project ID:
+
+```text
+Kristal/
+└── mods/
+    └── deltarune_from_scratch_ch1/
+        ├── mod.json
+        ├── mod.lua
+        ├── scripts/
+        └── assets/
+```
+
+From the Kristal directory, run:
 
 ```bash
-love .
+love . --mod deltarune_from_scratch_ch1
 ```
 
-On Windows, you can also drag the project folder onto `love.exe`.
-
-## Controls
-
-| Input | Action |
-|---|---|
-| Arrow keys / WASD | Move |
-| Left or right Shift | Run |
-| Z / Enter / Space | Confirm or interact |
-| X / Escape | Cancel where supported |
-| B | Start the battle test |
-| F3 | Hold to show collision geometry |
-| F11 | Toggle fullscreen |
-
-## Adding legally obtained sprite PNGs
-
-The project never downloads or redistributes DELTARUNE's proprietary assets. When a supported file is absent, an original placeholder is generated from `assets/placeholders.lua`.
-
-Place your own legally obtained PNG files at these exact paths:
+## Project structure
 
 ```text
-assets/
-├── characters/
-│   ├── kris/
-│   │   ├── idle_down.png
-│   │   ├── idle_up.png
-│   │   ├── idle_left.png
-│   │   └── idle_right.png
-│   └── susie/
-│       └── idle_down.png
-├── enemies/
-│   └── training_dummy.png
-└── npcs/
-    └── training_dummy.png
+mod.json
+mod.lua
+scripts/
+├── world/maps/battle_room.lua
+├── data/actors/training_dummy.lua
+└── battle/
+    ├── encounters/training.lua
+    ├── enemies/training_dummy.lua
+    ├── waves/basic.lua
+    └── bullets/smallbullet.lua
+assets/sprites/
+├── enemies/training_dummy/idle.png
+└── bullets/smallbullet.png
 ```
 
-PNG files are loaded at their native size. Use nearest-neighbor-friendly pixel art and avoid filtered resizing.
+The encounter, enemy, actor, wave, bullet, and starter sprites are adapted from Kristal's official `mod_template`. See `THIRD_PARTY_NOTICES.md` and `LICENSES/KRISTAL-BSD-3-CLAUSE.txt`.
 
-## Project layout
+## Development direction
 
-```text
-conf.lua                  LÖVE window configuration
-main.lua                  LÖVE callbacks
-src/game.lua              canvas, states, scaling, and top-level flow
-src/world.lua             rooms, movement, collisions, NPCs, exits
-src/dialogue.lua          dialogue box and typewriter behavior
-src/battle.lua            battle menu, attacks, soul, bullets, HP
-src/assets.lua            optional PNG loader and fallback handling
-src/util.lua              shared math and collision helpers
-assets/placeholders.lua   original runtime-generated placeholder sprites
-```
-
-## Recommended next milestones
-
-1. Replace collision rectangles with a Tiled map loader.
-2. Add animated sprite sheets and a reusable animation class.
-3. Add party followers and room-specific encounter scripts.
-4. Add save points and JSON save data.
-5. Rebuild Chapter 1 scenes one room at a time using original code and legally obtained local assets.
-6. Add original or properly licensed music and sound effects.
-
-## Asset and code notice
-
-The source code and placeholder art in this repository are original project material. DELTARUNE names, characters, artwork, music, dialogue, and other game assets belong to their respective rights holders and are not included here.
+Chapter 1 content should now be implemented as normal Kristal maps, cutscenes, actors, encounters, enemies, waves, items, and spells. Do not rebuild the battle engine again; extend Kristal's systems instead.
