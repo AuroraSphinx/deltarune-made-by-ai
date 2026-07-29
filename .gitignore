@@ -7,3 +7,6 @@ Thumbs.db
 assets/**/*.ogg
 assets/**/*.wav
 assets/**/*.mp3
+
+DeltaruneBuild/
+deltarune.love
