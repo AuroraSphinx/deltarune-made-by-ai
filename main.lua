@@ -1,4 +1,8 @@
+local Assets = require("src.assets")
+
 function love.load()
+    love.graphics.setDefaultFilter("nearest", "nearest")
+    Assets:load()
     player = {x = 100, y = 100, speed = 200}
 end
 
