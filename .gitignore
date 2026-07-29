@@ -1,0 +1,9 @@
+*.love
+*.zip
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+assets/**/*.ogg
+assets/**/*.wav
+assets/**/*.mp3
