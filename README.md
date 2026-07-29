@@ -1,17 +1,18 @@
 # DELTA SCRATCH — Chapter 1 LÖVE2D Prototype
 
-A from-scratch LÖVE2D foundation for rebuilding a Chapter 1-style game room by room.
+A from-scratch LÖVE2D codebase for rebuilding a Chapter 1-style game room by room.
 
-Current features:
+Included modules:
 
-- crisp 320×240 virtual resolution with integer scaling
-- title screen and state management
-- overworld movement, collisions, NPCs, and room exits
-- typewriter dialogue boxes
-- a battle prototype with FIGHT, ACT, SPARE, and FLEE
-- red SOUL movement, HP, invulnerability frames, and bullet patterns
+- crisp 320×240 virtual-resolution and scaling code
+- overworld movement, collisions, NPCs, dialogue, and room exits
+- a battle prototype with FIGHT, ACT, SPARE, FLEE, HP, and bullet patterns
 - a Kristal-style asset registry with automatic folder scanning
 - numbered PNG animation support and placeholder fallbacks
+
+## Current development entry point
+
+OpenCode currently uses `main.lua` as a small WASD rectangle test. The test now calls `Assets:load()` at startup, so the new asset system remains active without reverting OpenCode's work. The fuller prototype modules are still available under `src/` and can be reconnected later.
 
 ## Run it
 
@@ -23,17 +24,7 @@ love .
 
 On Windows, you can also drag the project folder onto `love.exe`.
 
-## Controls
-
-| Input | Action |
-|---|---|
-| Arrow keys / WASD | Move |
-| Left or right Shift | Run |
-| Z / Enter / Space | Confirm or interact |
-| X / Escape | Cancel where supported |
-| B | Start the battle test |
-| F3 | Hold to show collision geometry |
-| F11 | Toggle fullscreen |
+Current test controls: **WASD** moves the rectangle.
 
 ## Kristal-style assets
 
@@ -98,7 +89,7 @@ See [`assets/README.md`](assets/README.md) for the complete layout and naming ru
 
 ```text
 conf.lua                  LÖVE window configuration
-main.lua                  LÖVE callbacks
+main.lua                  current OpenCode test entry point
 src/game.lua              canvas, states, scaling, and top-level flow
 src/world.lua             rooms, movement, collisions, NPCs, exits
 src/dialogue.lua          dialogue box and typewriter behavior
@@ -111,10 +102,10 @@ assets/placeholders.lua   original runtime-generated fallback sprites
 ## Recommended next milestones
 
 1. Add a reusable actor/animation class that stores animation state per character.
-2. Replace collision rectangles with a Tiled map loader.
-3. Add party followers and room-specific encounter scripts.
-4. Add save points and JSON save data.
-5. Build Chapter 1 scenes one room at a time.
+2. Reconnect the full game state after the rectangle test is finished.
+3. Replace collision rectangles with a Tiled map loader.
+4. Add party followers and room-specific encounter scripts.
+5. Add save points and JSON save data.
 6. Add music and sound hooks through the new asset registry.
 
 ## Notice
