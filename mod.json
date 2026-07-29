@@ -1,0 +1,32 @@
+{
+    "id": "deltarune_from_scratch_ch1",
+    "name": "DELTARUNE From Scratch — Chapter 1",
+    "subtitle": "Built directly on Kristal's DELTARUNE battle engine",
+    "version": "v0.1.0",
+    "engineVer": "v0.11.0-dev",
+    "chapter": 1,
+    "map": "battle_room",
+    "party": ["kris", "susie", "ralsei"],
+    "inventory": {
+        "items": ["darkburger", "darkburger", "darkburger"],
+        "key_items": []
+    },
+    "equipment": {
+        "kris": {"weapon": "wood_blade", "armor": ["amber_card", "amber_card"]},
+        "susie": {"weapon": "mane_ax", "armor": ["amber_card", "amber_card"]},
+        "ralsei": {"weapon": "red_scarf", "armor": ["amber_card", "amber_card"]}
+    },
+    "hardReset": false,
+    "hidden": false,
+    "setWindowTitleAndIcon": true,
+    "config": {
+        "kristal": {
+            "lightWorldSystem": false,
+            "growStronger": true,
+            "partyActions": true,
+            "enemyAuras": true,
+            "mercyMessages": true
+        }
+    },
+    "dev": true
+}
