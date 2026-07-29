@@ -4,6 +4,6 @@
 Thumbs.db
 .vscode/
 .idea/
-assets/**/*.ogg
-assets/**/*.wav
-assets/**/*.mp3
+
+# Optional private import/scratch area. Typed assets outside this folder are tracked.
+assets/_local/
