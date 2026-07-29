@@ -1,18 +1,26 @@
-local Assets = require("src.assets")
+local Game = require("src.game")
 
 function love.load()
     love.graphics.setDefaultFilter("nearest", "nearest")
-    Assets:load()
-    player = {x = 100, y = 100, speed = 200}
+    love.keyboard.setKeyRepeat(false)
+    Game:load()
 end
 
 function love.update(dt)
-    if love.keyboard.isDown("w") then player.y = player.y - player.speed * dt end
-    if love.keyboard.isDown("s") then player.y = player.y + player.speed * dt end
-    if love.keyboard.isDown("a") then player.x = player.x - player.speed * dt end
-    if love.keyboard.isDown("d") then player.x = player.x + player.speed * dt end
+    Game:update(math.min(dt, 1 / 20))
 end
 
 function love.draw()
-    love.graphics.rectangle("fill", player.x, player.y, 32, 32)
+    Game:draw()
+end
+
+function love.keypressed(key, scancode, isrepeat)
+    if isrepeat then
+        return
+    end
+    Game:keypressed(key, scancode)
+end
+
+function love.resize(width, height)
+    Game:resize(width, height)
 end
