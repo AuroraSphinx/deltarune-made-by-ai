@@ -1,0 +1,26 @@
+local Game = require("src.game")
+
+function love.load()
+    love.graphics.setDefaultFilter("nearest", "nearest")
+    love.keyboard.setKeyRepeat(false)
+    Game:load()
+end
+
+function love.update(dt)
+    Game:update(math.min(dt, 1 / 20))
+end
+
+function love.draw()
+    Game:draw()
+end
+
+function love.keypressed(key, scancode, isrepeat)
+    if isrepeat then
+        return
+    end
+    Game:keypressed(key, scancode)
+end
+
+function love.resize(width, height)
+    Game:resize(width, height)
+end
