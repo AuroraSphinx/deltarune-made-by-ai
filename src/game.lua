@@ -9,16 +9,36 @@ local Game = {
     state = "title",
 }
 
+local function loadFont(path, size)
+    if love.filesystem.getInfo(path, "file") then
+        local font = love.graphics.newFont(path, size)
+        font:setFilter("nearest", "nearest")
+        return font
+    end
+
+    return love.graphics.newFont(size)
+end
+
 function Game:load()
     self.canvas = love.graphics.newCanvas(self.virtualWidth, self.virtualHeight)
     self.canvas:setFilter("nearest", "nearest")
 
+    local monoFont = "assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf"
+    local sansFont = "assets/fonts/DeterminationSansWebRegular-369X.ttf"
+
     self.fonts = {
-        tiny = love.graphics.newFont(8),
-        small = love.graphics.newFont(10),
-        normal = love.graphics.newFont(12),
-        title = love.graphics.newFont(24),
+        tiny = loadFont(monoFont, 8),
+        small = loadFont(monoFont, 10),
+        normal = loadFont(monoFont, 12),
+        title = loadFont(sansFont, 24),
+        subtitle = loadFont(sansFont, 12),
     }
+
+    local titleLogoPath = "assets/ui/title-logo.png"
+    if love.filesystem.getInfo(titleLogoPath, "file") then
+        self.titleLogo = love.graphics.newImage(titleLogoPath)
+        self.titleLogo:setFilter("nearest", "nearest")
+    end
 
     Assets:load()
     self.assets = Assets
@@ -90,16 +110,21 @@ function Game:drawTitle()
         love.graphics.rectangle("fill", x, y, 2, 2)
     end
 
-    love.graphics.setFont(self.fonts.title)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("DELTA SCRATCH", 0, 70, 320, "center")
+    if self.titleLogo then
+        local logoX = math.floor((self.virtualWidth - self.titleLogo:getWidth()) / 2)
+        love.graphics.draw(self.titleLogo, logoX, 70)
+    else
+        love.graphics.setFont(self.fonts.title)
+        love.graphics.printf("DELTA SCRATCH", 0, 70, self.virtualWidth, "center")
+    end
 
-    love.graphics.setFont(self.fonts.normal)
+    love.graphics.setFont(self.fonts.subtitle)
     love.graphics.setColor(0.72, 0.58, 0.92, 1)
-    love.graphics.printf("CHAPTER 1 ENGINE PROTOTYPE", 0, 103, 320, "center")
+    love.graphics.printf("CHAPTER 1 ENGINE PROTOTYPE", 0, 111, self.virtualWidth, "center")
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("Press Z or Enter", 0, 153, 320, "center")
+    love.graphics.printf("Press Z or Enter", 0, 153, self.virtualWidth, "center")
 
     love.graphics.setFont(self.fonts.tiny)
     love.graphics.setColor(0.65, 0.65, 0.70, 1)
