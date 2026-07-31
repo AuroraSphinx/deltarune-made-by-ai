@@ -35,7 +35,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path DeltaruneBuild -Force | Out-Null
-          Copy-Item -LiteralPath "$env:WINDIR\System32\where.exe" -Destination DeltaruneBuild\deltarune.exe -Force
+          $source = @'
+          using System;
+          public static class Program
+          {
+              public static void Main() { }
+          }
+          '@
+          Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly DeltaruneBuild\deltarune.exe -OutputType ConsoleApplication
           [IO.File]::WriteAllBytes((Join-Path $PWD 'DeltaruneBuild\love.dll'), [byte[]](0x4D, 0x5A, 0x90, 0x00))
           Set-Content -LiteralPath DeltaruneBuild\license.txt -Value 'LOVE runtime test fixture'
 
@@ -46,7 +53,9 @@ jobs:
       - name: Verify build outputs
         shell: pwsh
         run: |
-          Get-ChildItem -LiteralPath build -Recurse | Select-Object FullName, Length
+          Get-ChildItem -LiteralPath build -Recurse | ForEach-Object {
+            Write-Host "$($_.FullName) [$($_.Length) bytes]"
+          }
 
           $required = @(
             'build\release\deltarune.love',
