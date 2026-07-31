@@ -14,12 +14,14 @@ set "BUILD_EXIT=%ERRORLEVEL%"
 echo.
 if "%BUILD_EXIT%"=="0" (
     echo Build finished successfully.
-    if exist "%~dp0build" start "" "%~dp0build"
 ) else (
     echo Build failed with exit code %BUILD_EXIT%.
     echo The PowerShell error above is the real failure reason.
 )
 
 echo.
-if /I not "%~1"=="--no-pause" pause
+if /I not "%~1"=="--no-pause" (
+    if "%BUILD_EXIT%"=="0" if exist "%~dp0build" start "" "%~dp0build"
+    pause
+)
 exit /b %BUILD_EXIT%
