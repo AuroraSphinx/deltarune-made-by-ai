@@ -14,6 +14,7 @@ $DebugOut = Join-Path $BuildDir "debug"
 $ReleaseStage = Join-Path $env:TEMP ("delta-scratch-release-" + [Guid]::NewGuid().ToString("N"))
 $DebugStage = Join-Path $env:TEMP ("delta-scratch-debug-" + [Guid]::NewGuid().ToString("N"))
 $BootExe = Join-Path $env:TEMP ("delta-scratch-love-" + [Guid]::NewGuid().ToString("N") + ".exe")
+$BuildSucceeded = $false
 
 function Write-Section {
     param([string]$Text)
@@ -22,10 +23,7 @@ function Write-Section {
 }
 
 function Require-RepoPath {
-    param(
-        [string]$RelativePath,
-        [string]$Description
-    )
+    param([string]$RelativePath, [string]$Description)
 
     $fullPath = Join-Path $Root $RelativePath
     if (-not (Test-Path -LiteralPath $fullPath)) {
@@ -34,17 +32,12 @@ function Require-RepoPath {
 }
 
 function Assert-OutputFile {
-    param(
-        [string]$Path,
-        [string]$Description
-    )
+    param([string]$Path, [string]$Description)
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "$Description was not created at: $Path"
     }
-
-    $length = (Get-Item -LiteralPath $Path).Length
-    if ($length -le 0) {
+    if ((Get-Item -LiteralPath $Path).Length -le 0) {
         throw "$Description is empty at: $Path"
     }
 }
@@ -62,13 +55,12 @@ function Copy-GameTree {
     param([string]$Destination)
 
     New-CleanDirectory -Path $Destination
-
     Copy-Item -LiteralPath (Join-Path $Root "main.lua") -Destination (Join-Path $Destination "main.lua") -Force
     Copy-Item -LiteralPath (Join-Path $Root "conf.lua") -Destination (Join-Path $Destination "conf.lua") -Force
 
-    $noticePath = Join-Path $Root "THIRD_PARTY_NOTICES.md"
-    if (Test-Path -LiteralPath $noticePath) {
-        Copy-Item -LiteralPath $noticePath -Destination (Join-Path $Destination "THIRD_PARTY_NOTICES.md") -Force
+    $notices = Join-Path $Root "THIRD_PARTY_NOTICES.md"
+    if (Test-Path -LiteralPath $notices) {
+        Copy-Item -LiteralPath $notices -Destination (Join-Path $Destination "THIRD_PARTY_NOTICES.md") -Force
     }
 
     foreach ($directory in @("src", "vendor", "assets")) {
@@ -76,35 +68,71 @@ function Copy-GameTree {
     }
 }
 
-function New-LovePackage {
-    param(
-        [string]$StageDirectory,
-        [string]$OutputFile
+function Assert-LovePackageLayout {
+    param([string]$PackagePath)
+
+    $requiredEntries = @(
+        "main.lua",
+        "conf.lua",
+        "src/game.lua",
+        "vendor/kristal_legacy/battle.lua",
+        "assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf"
     )
+
+    $archive = [IO.Compression.ZipFile]::OpenRead($PackagePath)
+    try {
+        $entryNames = @($archive.Entries | ForEach-Object { $_.FullName })
+        foreach ($requiredEntry in $requiredEntries) {
+            if ($entryNames -notcontains $requiredEntry) {
+                throw "LOVE package has an invalid archive root. Missing entry: $requiredEntry"
+            }
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
+function New-LovePackage {
+    param([string]$StageDirectory, [string]$OutputFile)
 
     if (Test-Path -LiteralPath $OutputFile) {
         Remove-Item -LiteralPath $OutputFile -Force
     }
 
+    # Resolve both roots before calculating relative paths. Using the raw TEMP
+    # string previously left part of the random directory name inside the ZIP,
+    # producing entries such as "77a/main.lua" instead of root-level main.lua.
+    $stageRoot = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $StageDirectory).Path)
+    $stageRoot = $stageRoot.TrimEnd([char[]]@([char]92, [char]47)) + [IO.Path]::DirectorySeparatorChar
+    $files = @(Get-ChildItem -LiteralPath $stageRoot -Recurse -File)
+    if ($files.Count -eq 0) {
+        throw "No files were staged for: $OutputFile"
+    }
+
     $outputStream = [IO.File]::Open($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
     try {
-        $archive = [IO.Compression.ZipArchive]::new(
+        $archive = New-Object IO.Compression.ZipArchive(
             $outputStream,
             [IO.Compression.ZipArchiveMode]::Create,
             $false
         )
         try {
-            $files = @(Get-ChildItem -LiteralPath $StageDirectory -Recurse -File)
-            if ($files.Count -eq 0) {
-                throw "No files were staged for $OutputFile"
-            }
-
             foreach ($file in $files) {
-                $relativePath = $file.FullName.Substring($StageDirectory.Length).TrimStart([char[]]"\/")
-                $entryName = $relativePath.Replace('\', '/')
+                $fullFilePath = [IO.Path]::GetFullPath($file.FullName)
+                if (-not $fullFilePath.StartsWith($stageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Staged file escaped the package root: $fullFilePath"
+                }
+
+                $relativePath = $fullFilePath.Substring($stageRoot.Length)
+                $entryName = $relativePath.Replace([char]92, [char]47)
+                if ([string]::IsNullOrWhiteSpace($entryName)) {
+                    throw "Could not calculate a ZIP entry name for: $fullFilePath"
+                }
+
                 [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                     $archive,
-                    $file.FullName,
+                    $fullFilePath,
                     $entryName,
                     [IO.Compression.CompressionLevel]::Optimal
                 ) | Out-Null
@@ -119,6 +147,7 @@ function New-LovePackage {
     }
 
     Assert-OutputFile -Path $OutputFile -Description "LOVE package"
+    Assert-LovePackageLayout -PackagePath $OutputFile
 }
 
 function Find-LoveExecutable {
@@ -130,23 +159,15 @@ function Find-LoveExecutable {
 
     $programFiles64 = [Environment]::GetFolderPath("ProgramFiles")
     $programFiles32 = [Environment]::GetFolderPath("ProgramFilesX86")
-
-    if ($programFiles64) {
-        $candidates.Add((Join-Path $programFiles64 "LOVE\love.exe"))
-    }
-    if ($programFiles32) {
-        $candidates.Add((Join-Path $programFiles32 "LOVE\love.exe"))
-    }
+    if ($programFiles64) { $candidates.Add((Join-Path $programFiles64 "LOVE\love.exe")) }
+    if ($programFiles32) { $candidates.Add((Join-Path $programFiles32 "LOVE\love.exe")) }
     if ($env:LOCALAPPDATA) {
         $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\LOVE\love.exe"))
         $candidates.Add((Join-Path $env:LOCALAPPDATA "LOVE\love.exe"))
     }
 
     $pathCommand = Get-Command "love.exe" -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pathCommand) {
-        $candidates.Add($pathCommand.Source)
-    }
-
+    if ($pathCommand) { $candidates.Add($pathCommand.Source) }
     $candidates.Add((Join-Path $Root "DeltaruneBuild\deltarune.exe"))
 
     foreach ($candidate in $candidates) {
@@ -154,56 +175,40 @@ function Find-LoveExecutable {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-
     return $null
 }
 
 function Join-BinaryFiles {
-    param(
-        [string]$FirstFile,
-        [string]$SecondFile,
-        [string]$OutputFile
-    )
+    param([string]$FirstFile, [string]$SecondFile, [string]$OutputFile)
 
     $output = [IO.File]::Open($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
     try {
         foreach ($inputPath in @($FirstFile, $SecondFile)) {
             $input = [IO.File]::OpenRead($inputPath)
-            try {
-                $input.CopyTo($output)
-            }
-            finally {
-                $input.Dispose()
-            }
+            try { $input.CopyTo($output) }
+            finally { $input.Dispose() }
         }
     }
     finally {
         $output.Dispose()
     }
-
     Assert-OutputFile -Path $OutputFile -Description "Fused executable"
 }
 
 function Copy-LoveRuntime {
-    param(
-        [string]$LoveDirectory,
-        [string]$Destination
-    )
+    param([string]$LoveDirectory, [string]$Destination)
 
     $dlls = @(Get-ChildItem -LiteralPath $LoveDirectory -Filter "*.dll" -File -ErrorAction SilentlyContinue)
     foreach ($dll in $dlls) {
         Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $Destination $dll.Name) -Force
     }
 
-    $licensePath = Join-Path $LoveDirectory "license.txt"
-    if (Test-Path -LiteralPath $licensePath) {
-        Copy-Item -LiteralPath $licensePath -Destination (Join-Path $Destination "LOVE-LICENSE.txt") -Force
+    $license = Join-Path $LoveDirectory "license.txt"
+    if (Test-Path -LiteralPath $license) {
+        Copy-Item -LiteralPath $license -Destination (Join-Path $Destination "LOVE-LICENSE.txt") -Force
     }
-
     return $dlls.Count
 }
-
-$buildSucceeded = $false
 
 try {
     Set-Location -LiteralPath $Root
@@ -244,8 +249,7 @@ try {
     Write-Section "Staging debug files"
     Copy-GameTree -Destination $DebugStage
     $debugConf = Join-Path $DebugStage "conf.lua"
-    $debugText = [IO.File]::ReadAllText($debugConf)
-    $debugText = $debugText -replace "t\.console = false", "t.console = true"
+    $debugText = [IO.File]::ReadAllText($debugConf) -replace "t\.console = false", "t.console = true"
     [IO.File]::WriteAllText($debugConf, $debugText, (New-Object Text.UTF8Encoding($false)))
 
     $releaseLove = Join-Path $ReleaseOut "deltarune.love"
@@ -261,7 +265,6 @@ try {
     if ($loveExe) {
         $loveDirectory = Split-Path -Parent $loveExe
         Copy-Item -LiteralPath $loveExe -Destination $BootExe -Force
-
         $releaseExe = Join-Path $ReleaseOut "deltarune.exe"
         $debugExe = Join-Path $DebugOut "debug-deltarune.exe"
 
@@ -275,11 +278,9 @@ try {
         $debugDllCount = Copy-LoveRuntime -LoveDirectory $loveDirectory -Destination $DebugOut
         Write-Host "Copied $releaseDllCount LOVE runtime DLLs into the release folder."
         Write-Host "Copied $debugDllCount LOVE runtime DLLs into the debug folder."
-
         if ($releaseDllCount -eq 0) {
             Write-Warning "No LOVE DLLs were found beside love.exe. The fused EXE may need LOVE to remain installed."
         }
-
         $builtExe = $true
     }
 
@@ -289,16 +290,12 @@ try {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "Release package:"
     Write-Host ("  " + $releaseLove)
-    if ($builtExe) {
-        Write-Host ("  " + (Join-Path $ReleaseOut "deltarune.exe"))
-    }
+    if ($builtExe) { Write-Host ("  " + (Join-Path $ReleaseOut "deltarune.exe")) }
     Write-Host "Debug package:"
     Write-Host ("  " + $debugLove)
-    if ($builtExe) {
-        Write-Host ("  " + (Join-Path $DebugOut "debug-deltarune.exe"))
-    }
+    if ($builtExe) { Write-Host ("  " + (Join-Path $DebugOut "debug-deltarune.exe")) }
 
-    $buildSucceeded = $true
+    $BuildSucceeded = $true
 }
 catch {
     Write-Host ""
@@ -318,7 +315,5 @@ finally {
     }
 }
 
-if ($buildSucceeded) {
-    exit 0
-}
+if ($BuildSucceeded) { exit 0 }
 exit 1
