@@ -16,20 +16,31 @@ local TITLE_ITEMS = {"START GAME", "OPTIONS", "QUIT"}
 local OPTION_ROWS = {
     {id = "resolution", label = "RESOLUTION"},
     {id = "display", label = "DISPLAY MODE"},
-    {id = "scaling", label = "SCALING"},
+    {id = "scaling", label = "WORLD FILTER"},
     {id = "vsync", label = "VSYNC"},
     {id = "back", label = "BACK"},
 }
+local SCALING_MODES = {"smooth", "sharp", "pixel"}
 
 local function wrap(index, count)
     return ((index - 1) % count) + 1
 end
 
-local function loadFont(path, size)
+local function clamp(value, minimum, maximum)
+    return math.max(minimum, math.min(maximum, value))
+end
+
+local function loadFont(path, size, filter)
+    local font
     if love.filesystem.getInfo(path, "file") then
-        return love.graphics.newFont(path, size)
+        font = love.graphics.newFont(path, size)
+    else
+        font = love.graphics.newFont(size)
     end
-    return love.graphics.newFont(size)
+    if filter then
+        font:setFilter(filter, filter)
+    end
+    return font
 end
 
 local function drawHeart(x, y, scale)
@@ -120,7 +131,7 @@ function Game:loadSettings()
         width = currentWidth,
         height = currentHeight,
         display = "windowed",
-        scaling = "smooth",
+        scaling = "sharp",
         vsync = true,
     }
 
@@ -134,7 +145,7 @@ function Game:loadSettings()
                 self.settings.height = tonumber(value) or self.settings.height
             elseif key == "display" and (value == "windowed" or value == "borderless") then
                 self.settings.display = value
-            elseif key == "scaling" and (value == "smooth" or value == "pixel") then
+            elseif key == "scaling" and (value == "smooth" or value == "sharp" or value == "pixel") then
                 self.settings.scaling = value
             elseif key == "vsync" then
                 self.settings.vsync = value == "true"
@@ -165,6 +176,24 @@ function Game:saveSettings()
     end
 end
 
+function Game:rebuildNativeFonts(width, height)
+    if not self.monoFontPath or not self.sansFontPath then return end
+
+    local uiScale = clamp(height / 720, 0.75, 2.25)
+    local function scaled(size)
+        return math.max(8, math.floor(size * uiScale + 0.5))
+    end
+
+    self.nativeScale = uiScale
+    self.nativeFonts = {
+        tiny = loadFont(self.monoFontPath, scaled(14), "linear"),
+        small = loadFont(self.monoFontPath, scaled(20), "linear"),
+        normal = loadFont(self.monoFontPath, scaled(26), "linear"),
+        subtitle = loadFont(self.sansFontPath, scaled(22), "linear"),
+        title = loadFont(self.sansFontPath, scaled(66), "linear"),
+    }
+end
+
 function Game:applyRenderFilter()
     local filter = self.settings.scaling == "smooth" and "linear" or "nearest"
     love.graphics.setDefaultFilter(filter, filter, 1)
@@ -172,9 +201,6 @@ function Game:applyRenderFilter()
 
     for _, font in pairs(self.fonts) do
         font:setFilter(filter, filter)
-    end
-    if self.titleLogo then
-        self.titleLogo:setFilter(filter, filter)
     end
     if self.assets and self.assets.setFilter then
         self.assets:setFilter(filter)
@@ -223,21 +249,16 @@ end
 function Game:load()
     self.canvas = love.graphics.newCanvas(self.virtualWidth, self.virtualHeight)
 
-    local monoFont = "assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf"
-    local sansFont = "assets/fonts/DeterminationSansWebRegular-369X.ttf"
+    self.monoFontPath = "assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf"
+    self.sansFontPath = "assets/fonts/DeterminationSansWebRegular-369X.ttf"
 
     self.fonts = {
-        tiny = loadFont(monoFont, 8),
-        small = loadFont(monoFont, 10),
-        normal = loadFont(monoFont, 12),
-        title = loadFont(sansFont, 24),
-        subtitle = loadFont(sansFont, 12),
+        tiny = loadFont(self.monoFontPath, 8),
+        small = loadFont(self.monoFontPath, 10),
+        normal = loadFont(self.monoFontPath, 12),
+        title = loadFont(self.sansFontPath, 24),
+        subtitle = loadFont(self.sansFontPath, 12),
     }
-
-    local titleLogoPath = "assets/ui/title-logo.png"
-    if love.filesystem.getInfo(titleLogoPath, "file") then
-        self.titleLogo = love.graphics.newImage(titleLogoPath)
-    end
 
     Assets:load()
     self.assets = Assets
@@ -267,6 +288,7 @@ function Game:resize(width, height)
     self.scale = scale
     self.offsetX = math.floor((width - self.virtualWidth * self.scale) / 2)
     self.offsetY = math.floor((height - self.virtualHeight * self.scale) / 2)
+    self:rebuildNativeFonts(width, height)
 end
 
 function Game:startBattle()
@@ -294,7 +316,14 @@ function Game:changeOption(direction)
         self.settings.display = self.settings.display == "windowed" and "borderless" or "windowed"
         self:applyWindowSettings()
     elseif row.id == "scaling" then
-        self.settings.scaling = self.settings.scaling == "smooth" and "pixel" or "smooth"
+        local current = 1
+        for index, mode in ipairs(SCALING_MODES) do
+            if mode == self.settings.scaling then
+                current = index
+                break
+            end
+        end
+        self.settings.scaling = SCALING_MODES[wrap(current + direction, #SCALING_MODES)]
         self:applyRenderFilter()
         self:resize(love.graphics.getDimensions())
     elseif row.id == "vsync" then
@@ -366,58 +395,87 @@ function Game:keypressed(key)
     end
 end
 
-function Game:drawTitleBackdrop()
+function Game:getNativePanel(width, height)
+    local margin = math.max(24, math.floor(40 * self.nativeScale))
+    local panelWidth = math.min(width - margin * 2, math.floor(900 * self.nativeScale))
+    local panelHeight = math.min(height - margin * 2, math.floor(610 * self.nativeScale))
+    local panelX = math.floor((width - panelWidth) / 2)
+    local panelY = math.floor((height - panelHeight) / 2)
+    return panelX, panelY, panelWidth, panelHeight
+end
+
+function Game:drawNativeBackdrop(width, height)
     love.graphics.clear(0.018, 0.012, 0.035, 1)
 
-    love.graphics.setColor(0.17, 0.06, 0.25, 0.7)
-    for x = -20, self.virtualWidth + 20, 24 do
-        love.graphics.line(x, 0, x - 34, self.virtualHeight)
-    end
-    love.graphics.setColor(0.29, 0.12, 0.42, 0.45)
-    for y = 20, self.virtualHeight, 24 do
-        love.graphics.line(0, y, self.virtualWidth, y)
+    local spacing = math.max(48, math.floor(72 * self.nativeScale))
+    love.graphics.setLineWidth(math.max(1, self.nativeScale))
+    love.graphics.setColor(0.18, 0.055, 0.28, 0.75)
+    for x = -height, width + height, spacing do
+        love.graphics.line(x, 0, x - math.floor(height * 0.20), height)
     end
 
-    love.graphics.setColor(0, 0, 0, 0.56)
-    love.graphics.rectangle("fill", 20, 22, 280, 196)
-    love.graphics.setColor(0.55, 0.25, 0.78, 0.65)
-    love.graphics.rectangle("line", 20, 22, 280, 196)
+    love.graphics.setColor(0.30, 0.11, 0.45, 0.42)
+    for y = spacing, height, spacing do
+        love.graphics.line(0, y, width, y)
+    end
+
+    local panelX, panelY, panelWidth, panelHeight = self:getNativePanel(width, height)
+    love.graphics.setColor(0, 0, 0, 0.72)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight)
+    love.graphics.setColor(0.49, 0.21, 0.72, 0.88)
+    love.graphics.setLineWidth(math.max(2, math.floor(3 * self.nativeScale)))
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight)
+
+    return panelX, panelY, panelWidth, panelHeight
 end
 
-function Game:drawTitleHeader(y)
+function Game:drawNativeTitleHeader(panelX, panelY, panelWidth, compact)
+    local titleY = panelY + math.floor((compact and 24 or 42) * self.nativeScale)
+
+    love.graphics.setFont(self.nativeFonts.title)
     love.graphics.setColor(1, 1, 1, 1)
-    if self.titleLogo then
-        local logoX = math.floor((self.virtualWidth - self.titleLogo:getWidth()) / 2)
-        love.graphics.draw(self.titleLogo, logoX, y)
-    else
-        love.graphics.setFont(self.fonts.title)
-        love.graphics.printf("DELTA SCRATCH", 0, y, self.virtualWidth, "center")
-    end
+    love.graphics.printf("DELTA SCRATCH", panelX, titleY, panelWidth, "center")
 
-    love.graphics.setFont(self.fonts.tiny)
-    love.graphics.setColor(0.75, 0.56, 0.92, 1)
-    love.graphics.printf("CHAPTER 1 ENGINE PROTOTYPE", 0, y + 38, self.virtualWidth, "center")
+    love.graphics.setFont(self.nativeFonts.tiny)
+    love.graphics.setColor(0.76, 0.57, 0.94, 1)
+    local subtitleY = titleY + self.nativeFonts.title:getHeight() + math.floor(4 * self.nativeScale)
+    love.graphics.printf("CHAPTER 1 ENGINE PROTOTYPE", panelX, subtitleY, panelWidth, "center")
+
+    return subtitleY + self.nativeFonts.tiny:getHeight()
 end
 
-function Game:drawMainTitleMenu()
-    self:drawTitleHeader(47)
+function Game:drawMainTitleMenuNative(panelX, panelY, panelWidth, panelHeight)
+    local headerBottom = self:drawNativeTitleHeader(panelX, panelY, panelWidth, false)
+    local menuTop = math.max(
+        headerBottom + math.floor(40 * self.nativeScale),
+        panelY + math.floor(panelHeight * 0.48)
+    )
+    local rowGap = math.floor(58 * self.nativeScale)
+    local textWidth = math.min(panelWidth, math.floor(360 * self.nativeScale))
+    local textX = math.floor(panelX + (panelWidth - textWidth) / 2)
 
-    love.graphics.setFont(self.fonts.normal)
+    love.graphics.setFont(self.nativeFonts.normal)
     for index, label in ipairs(TITLE_ITEMS) do
-        local y = 118 + (index - 1) * 25
+        local y = menuTop + (index - 1) * rowGap
         local selected = index == self.titleMenuIndex
         if selected then
             love.graphics.setColor(1, 1, 1, 1)
-            drawHeart(95, y + 7, 0.7)
+            drawHeart(textX - math.floor(26 * self.nativeScale), y + self.nativeFonts.normal:getHeight() * 0.48, 1.45 * self.nativeScale)
         else
-            love.graphics.setColor(0.52, 0.47, 0.58, 1)
+            love.graphics.setColor(0.50, 0.46, 0.57, 1)
         end
-        love.graphics.printf(label, 105, y, 120, "left")
+        love.graphics.printf(label, textX, y, textWidth, "center")
     end
 
-    love.graphics.setFont(self.fonts.tiny)
-    love.graphics.setColor(0.62, 0.60, 0.68, 1)
-    love.graphics.printf("ARROWS + Z / ENTER     F11 FULLSCREEN", 0, 205, self.virtualWidth, "center")
+    love.graphics.setFont(self.nativeFonts.tiny)
+    love.graphics.setColor(0.64, 0.62, 0.70, 1)
+    love.graphics.printf(
+        "ARROWS + Z / ENTER     F11 FULLSCREEN",
+        panelX,
+        panelY + panelHeight - self.nativeFonts.tiny:getHeight() - math.floor(18 * self.nativeScale),
+        panelWidth,
+        "center"
+    )
 end
 
 function Game:getOptionValue(row)
@@ -427,67 +485,85 @@ function Game:getOptionValue(row)
     elseif row.id == "display" then
         return self.settings.display == "borderless" and "BORDERLESS" or "WINDOWED"
     elseif row.id == "scaling" then
-        return self.settings.scaling == "smooth" and "SMOOTH" or "PIXEL PERFECT"
+        if self.settings.scaling == "smooth" then return "SMOOTH" end
+        if self.settings.scaling == "sharp" then return "SHARP" end
+        return "PIXEL PERFECT"
     elseif row.id == "vsync" then
         return self.settings.vsync and "ON" or "OFF"
     end
     return ""
 end
 
-function Game:drawOptions()
-    self:drawTitleHeader(31)
+function Game:drawOptionsNative(panelX, panelY, panelWidth, panelHeight)
+    local headerBottom = self:drawNativeTitleHeader(panelX, panelY, panelWidth, true)
 
-    love.graphics.setFont(self.fonts.subtitle)
+    love.graphics.setFont(self.nativeFonts.subtitle)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("OPTIONS", 0, 78, self.virtualWidth, "center")
+    local optionsY = headerBottom + math.floor(14 * self.nativeScale)
+    love.graphics.printf("OPTIONS", panelX, optionsY, panelWidth, "center")
 
-    love.graphics.setFont(self.fonts.small)
+    local rowsTop = optionsY + self.nativeFonts.subtitle:getHeight() + math.floor(34 * self.nativeScale)
+    local rowGap = math.floor(58 * self.nativeScale)
+    local leftX = panelX + math.floor(78 * self.nativeScale)
+    local rightX = panelX + math.floor(panelWidth * 0.53)
+    local rightWidth = panelX + panelWidth - rightX - math.floor(78 * self.nativeScale)
+
+    love.graphics.setFont(self.nativeFonts.small)
     for index, row in ipairs(OPTION_ROWS) do
-        local y = 102 + (index - 1) * 21
+        local y = rowsTop + (index - 1) * rowGap
         local selected = index == self.optionsIndex
 
         if selected then
-            drawHeart(35, y + 6, 0.58)
+            drawHeart(leftX - math.floor(28 * self.nativeScale), y + self.nativeFonts.small:getHeight() * 0.48, 1.25 * self.nativeScale)
             love.graphics.setColor(1, 1, 1, 1)
         else
-            love.graphics.setColor(0.55, 0.51, 0.62, 1)
+            love.graphics.setColor(0.56, 0.52, 0.63, 1)
         end
 
-        love.graphics.print(row.label, 46, y)
+        love.graphics.print(row.label, leftX, y)
         if row.id ~= "back" then
-            local value = self:getOptionValue(row)
             if selected then
-                love.graphics.setColor(0.98, 0.72, 0.30, 1)
+                love.graphics.setColor(1.00, 0.73, 0.28, 1)
             else
-                love.graphics.setColor(0.66, 0.58, 0.72, 1)
+                love.graphics.setColor(0.67, 0.59, 0.73, 1)
             end
-            love.graphics.printf("< " .. value .. " >", 142, y, 139, "right")
+            love.graphics.printf("<  " .. self:getOptionValue(row) .. "  >", rightX, y, rightWidth, "right")
         end
     end
 
-    love.graphics.setFont(self.fonts.tiny)
+    love.graphics.setFont(self.nativeFonts.tiny)
+    local footerY = panelY + panelHeight - self.nativeFonts.tiny:getHeight() - math.floor(18 * self.nativeScale)
     if self.settingsMessage then
         love.graphics.setColor(1, 0.35, 0.35, 1)
-        love.graphics.printf(self.settingsMessage, 26, 207, 268, "center")
+        love.graphics.printf(self.settingsMessage, panelX + 20, footerY, panelWidth - 40, "center")
     else
-        love.graphics.setColor(0.64, 0.61, 0.70, 1)
-        love.graphics.printf("LEFT / RIGHT TO CHANGE   X / ESC TO GO BACK", 0, 207, self.virtualWidth, "center")
+        love.graphics.setColor(0.66, 0.63, 0.72, 1)
+        love.graphics.printf(
+            "LEFT / RIGHT TO CHANGE   X / ESC TO GO BACK   TITLE UI IS NATIVE RESOLUTION",
+            panelX + 20,
+            footerY,
+            panelWidth - 40,
+            "center"
+        )
     end
 end
 
-function Game:drawTitle()
-    self:drawTitleBackdrop()
+function Game:drawTitleNative()
+    local width, height = love.graphics.getDimensions()
+    if not self.nativeFonts then
+        self:rebuildNativeFonts(width, height)
+    end
+
+    local panelX, panelY, panelWidth, panelHeight = self:drawNativeBackdrop(width, height)
     if self.titlePage == "options" then
-        self:drawOptions()
+        self:drawOptionsNative(panelX, panelY, panelWidth, panelHeight)
     else
-        self:drawMainTitleMenu()
+        self:drawMainTitleMenuNative(panelX, panelY, panelWidth, panelHeight)
     end
 end
 
 function Game:drawVirtual()
-    if self.state == "title" then
-        self:drawTitle()
-    elseif self.state == "world" then
+    if self.state == "world" then
         self.world:draw()
         self.dialogue:draw()
     elseif self.state == "battle" then
@@ -496,6 +572,12 @@ function Game:drawVirtual()
 end
 
 function Game:draw()
+    if self.state == "title" then
+        love.graphics.setCanvas()
+        self:drawTitleNative()
+        return
+    end
+
     love.graphics.setCanvas(self.canvas)
     love.graphics.clear(0, 0, 0, 1)
     self:drawVirtual()
