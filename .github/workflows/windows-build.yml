@@ -35,14 +35,16 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path DeltaruneBuild -Force | Out-Null
-          $source = @'
-          using System;
-          public static class Program
-          {
-              public static void Main() { }
+          $sourcePath = Join-Path $env:TEMP 'delta-scratch-test-runtime.cs'
+          Set-Content -LiteralPath $sourcePath -Value 'public static class Program { public static void Main() { } }'
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path -LiteralPath $csc)) {
+            throw "C# compiler not found at $csc"
           }
-          '@
-          Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly DeltaruneBuild\deltarune.exe -OutputType ConsoleApplication
+          & $csc /nologo /target:exe "/out:DeltaruneBuild\deltarune.exe" $sourcePath
+          if ($LASTEXITCODE -ne 0) {
+            throw "csc.exe failed with exit code $LASTEXITCODE"
+          }
           [IO.File]::WriteAllBytes((Join-Path $PWD 'DeltaruneBuild\love.dll'), [byte[]](0x4D, 0x5A, 0x90, 0x00))
           Set-Content -LiteralPath DeltaruneBuild\license.txt -Value 'LOVE runtime test fixture'
 
