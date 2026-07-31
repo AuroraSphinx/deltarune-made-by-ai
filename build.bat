@@ -15,6 +15,10 @@ if not exist icon.ico (
     echo ERROR: icon.ico not found
     exit /b 1
 )
+if not exist "vendor\kristal_legacy\battle.lua" (
+    echo ERROR: Kristal-derived battle runtime is missing from vendor\kristal_legacy
+    exit /b 1
+)
 
 echo === Cleaning previous builds ===
 if exist deltarune.love del deltarune.love >nul
@@ -47,7 +51,9 @@ mkdir "%RELEASE_DIR%\assets\fonts" >nul
 copy /Y main.lua "%RELEASE_DIR%\" >nul
 copy /Y conf.lua "%RELEASE_DIR%\" >nul
 copy /Y icon.png "%RELEASE_DIR%\" >nul
+copy /Y THIRD_PARTY_NOTICES.md "%RELEASE_DIR%\" >nul
 xcopy /Y /E /I /Q src "%RELEASE_DIR%\src\" >nul
+xcopy /Y /E /I /Q vendor "%RELEASE_DIR%\vendor\" >nul
 copy /Y assets\placeholders.lua "%RELEASE_DIR%\assets\" >nul
 copy /Y assets\README.md "%RELEASE_DIR%\assets\" >nul
 copy /Y assets\fonts\8bit.ttf "%RELEASE_DIR%\assets\fonts\" >nul
@@ -62,7 +68,9 @@ mkdir "%DEBUG_DIR%\assets\fonts" >nul
 copy /Y main.lua "%DEBUG_DIR%\" >nul
 copy /Y conf.lua "%DEBUG_DIR%\" >nul
 copy /Y icon.png "%DEBUG_DIR%\" >nul
+copy /Y THIRD_PARTY_NOTICES.md "%DEBUG_DIR%\" >nul
 xcopy /Y /E /I /Q src "%DEBUG_DIR%\src\" >nul
+xcopy /Y /E /I /Q vendor "%DEBUG_DIR%\vendor\" >nul
 copy /Y assets\placeholders.lua "%DEBUG_DIR%\assets\" >nul
 copy /Y assets\README.md "%DEBUG_DIR%\assets\" >nul
 copy /Y assets\fonts\8bit.ttf "%DEBUG_DIR%\assets\fonts\" >nul

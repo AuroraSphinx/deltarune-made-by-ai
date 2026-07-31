@@ -1,4 +1,7 @@
 local Game = require("src.game")
+local KristalErrorHandler = require("vendor.kristal_legacy.errorhandler")
+
+love.errorhandler = KristalErrorHandler
 
 function love.load()
     love.graphics.setDefaultFilter("nearest", "nearest")
