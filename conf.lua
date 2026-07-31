@@ -4,7 +4,7 @@ function love.conf(t)
     t.console = false
 
     t.window.title = "DELTA SCRATCH - Chapter 1 Prototype"
-    t.window.width = 960
+    t.window.width = 1280
     t.window.height = 720
     t.window.resizable = true
     t.window.minwidth = 640
