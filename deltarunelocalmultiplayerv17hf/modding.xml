@@ -1,0 +1,9 @@
+<patch type="xdelta" patch="./Chapter1LocalMultiplayerVer11_5.xdelta" to="./chapter1_windows/data.win" />
+<patch type="xdelta" patch="./Chapter2LocalMultiplayerVer6_5.xdelta" to="./chapter2_windows/data.win" />
+<patch type="xdelta" patch="./Chapter3LocalMultiplayerVer21_5.xdelta" to="./chapter3_windows/data.win" />
+<patch type="xdelta" patch="./Chapter4LocalMultiplayerVer12_5.xdelta" to="./chapter4_windows/data.win" />
+<patch type="xdelta" patch="./Chapter5LocalMultiplayerVer1B_HF.xdelta" to="./chapter5_windows/data.win" />
+
+
+
+
