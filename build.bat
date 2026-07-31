@@ -14,7 +14,7 @@ echo ========================================
 echo        DELTA SCRATCH BUILD SYSTEM
 echo ========================================
 echo.
-echo Native batch build. No PowerShell scripts.
+echo Native one-process batch build.
 echo.
 
 if not exist "main.lua" (
