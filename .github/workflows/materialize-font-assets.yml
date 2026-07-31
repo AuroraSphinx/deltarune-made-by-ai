@@ -1,0 +1,46 @@
+name: Materialize uploaded font assets
+
+on:
+  push:
+    branches:
+      - agent/use-determination-fonts
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and commit real assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=".font-assets.tar.gz.b64"
+          if [[ ! -f "$payload" ]]; then
+            echo "No payload yet; nothing to materialize."
+            exit 0
+          fi
+
+          base64 --decode "$payload" > /tmp/font-assets.tar.gz
+          tar -xzf /tmp/font-assets.tar.gz
+          rm "$payload"
+
+          test -f assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf
+          test -f assets/fonts/DeterminationSansWebRegular-369X.ttf
+          test -f assets/fonts/DETERMINATION-FONT-NOTICE.txt
+          test -f assets/ui/title-logo.png
+
+          file assets/fonts/*.ttf assets/ui/title-logo.png
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/fonts assets/ui "$payload"
+          git commit -m "Add Determination font assets"
+          git push
