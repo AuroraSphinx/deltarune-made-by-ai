@@ -76,10 +76,16 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path 'build\release\deltarune.love'))
           try {
-            $entries = $archive.Entries.FullName
+            $entries = @($archive.Entries.FullName)
+            foreach ($archiveEntry in $entries) {
+              Write-Host "ZIP ENTRY: <$archiveEntry>"
+            }
+            $normalizedEntries = @($entries | ForEach-Object {
+              $_.Replace('\', '/').TrimStart('/')
+            })
             foreach ($entry in @('main.lua', 'conf.lua', 'src/game.lua', 'vendor/kristal_legacy/battle.lua', 'assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf')) {
-              if ($entries -notcontains $entry) {
-                throw "Missing package entry: $entry"
+              if ($normalizedEntries -notcontains $entry) {
+                throw "Missing package entry after normalization: $entry"
               }
             }
           }
