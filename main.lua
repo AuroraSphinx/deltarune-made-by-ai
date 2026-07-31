@@ -4,7 +4,7 @@ local KristalErrorHandler = require("vendor.kristal_legacy.errorhandler")
 love.errorhandler = KristalErrorHandler
 
 function love.load()
-    love.graphics.setDefaultFilter("nearest", "nearest")
+    love.graphics.setDefaultFilter("linear", "linear", 1)
     love.keyboard.setKeyRepeat(false)
     Game:load()
 end
