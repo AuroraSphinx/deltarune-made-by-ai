@@ -1,9 +1,6 @@
 name: Materialize uploaded font assets
 
 on:
-  push:
-    branches:
-      - agent/use-determination-fonts
   pull_request:
     branches:
       - main
@@ -13,7 +10,7 @@ permissions:
 
 jobs:
   materialize:
-    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/use-determination-fonts')
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/use-determination-fonts'
     runs-on: ubuntu-latest
     steps:
       - name: Check out font branch
@@ -26,25 +23,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          payload=".font-assets.tar.gz.b64"
-          if [[ ! -f "$payload" ]]; then
-            echo "No payload yet; nothing to materialize."
+          shopt -s nullglob
+          parts=(.font-assets.part-*)
+          if (( ${#parts[@]} != 4 )); then
+            echo "Waiting for all four font payload chunks; found ${#parts[@]}."
             exit 0
           fi
 
-          base64 --decode "$payload" > /tmp/font-assets.tar.gz
+          cat "${parts[@]}" | base64 --decode > /tmp/font-assets.tar.gz
           tar -xzf /tmp/font-assets.tar.gz
-          rm "$payload"
 
           test -f assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf
           test -f assets/fonts/DeterminationSansWebRegular-369X.ttf
           test -f assets/fonts/DETERMINATION-FONT-NOTICE.txt
           test -f assets/ui/title-logo.png
-
           file assets/fonts/*.ttf assets/ui/title-logo.png
+
+          rm -f .font-assets.tar.gz.b64 .font-assets.part-*
+          rm -f .github/workflows/materialize-font-assets.yml
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/fonts assets/ui "$payload"
+          git add -A
           git commit -m "Add Determination font assets"
           git push origin HEAD:agent/use-determination-fonts
