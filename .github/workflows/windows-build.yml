@@ -1,10 +1,9 @@
-name: Windows build smoke test
+name: Windows pure batch build
 
 on:
   pull_request:
     paths:
       - build.bat
-      - tools/build.ps1
       - main.lua
       - conf.lua
       - src/**
@@ -16,7 +15,6 @@ on:
       - main
     paths:
       - build.bat
-      - tools/build.ps1
       - main.lua
       - conf.lua
       - src/**
@@ -31,61 +29,59 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Seed a minimal LOVE runtime for builder testing
+      - name: Confirm the shipped builder has no PowerShell chain
+        shell: pwsh
+        run: |
+          $bat = Get-Content -LiteralPath build.bat -Raw
+          if ($bat -match '(?i)powershell|\.ps1') {
+            throw 'build.bat still launches PowerShell.'
+          }
+          if (Test-Path -LiteralPath tools\build.ps1) {
+            throw 'tools/build.ps1 should have been removed.'
+          }
+
+      - name: Seed a minimal LOVE runtime
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path DeltaruneBuild -Force | Out-Null
           $sourcePath = Join-Path $env:TEMP 'delta-scratch-test-runtime.cs'
           Set-Content -LiteralPath $sourcePath -Value 'public static class Program { public static void Main() { } }'
           $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-          if (-not (Test-Path -LiteralPath $csc)) {
-            throw "C# compiler not found at $csc"
-          }
           & $csc /nologo /target:exe "/out:DeltaruneBuild\deltarune.exe" $sourcePath
-          if ($LASTEXITCODE -ne 0) {
-            throw "csc.exe failed with exit code $LASTEXITCODE"
-          }
+          if ($LASTEXITCODE -ne 0) { throw "csc.exe failed with exit code $LASTEXITCODE" }
           [IO.File]::WriteAllBytes((Join-Path $PWD 'DeltaruneBuild\love.dll'), [byte[]](0x4D, 0x5A, 0x90, 0x00))
           Set-Content -LiteralPath DeltaruneBuild\license.txt -Value 'LOVE runtime test fixture'
 
-      - name: Run build.bat
+      - name: Run the exact shipped BAT
         shell: cmd
         run: build.bat --no-pause
 
-      - name: Verify build outputs
+      - name: Verify release outputs and archive root
         shell: pwsh
         run: |
-          Get-ChildItem -LiteralPath build -Recurse | ForEach-Object {
-            Write-Host "$($_.FullName) [$($_.Length) bytes]"
-          }
-
-          $required = @(
+          foreach ($path in @(
             'build\release\deltarune.love',
             'build\release\deltarune.exe',
-            'build\release\love.dll',
-            'build\debug\debug-deltarune.love',
-            'build\debug\debug-deltarune.exe',
-            'build\debug\love.dll'
-          )
-          foreach ($path in $required) {
-            if (-not (Test-Path -LiteralPath $path)) {
-              throw "Missing expected build output: $path"
+            'build\release\love.dll'
+          )) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected output: $path"
             }
           }
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path 'build\release\deltarune.love'))
           try {
-            $entries = @($archive.Entries.FullName)
-            foreach ($archiveEntry in $entries) {
-              Write-Host "ZIP ENTRY: <$archiveEntry>"
-            }
-            $normalizedEntries = @($entries | ForEach-Object {
-              $_.Replace('\', '/').TrimStart('/')
-            })
-            foreach ($entry in @('main.lua', 'conf.lua', 'src/game.lua', 'vendor/kristal_legacy/battle.lua', 'assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf')) {
-              if ($normalizedEntries -notcontains $entry) {
-                throw "Missing package entry after normalization: $entry"
+            $entries = @($archive.Entries.FullName | ForEach-Object { $_.Replace('\', '/') })
+            foreach ($entry in @(
+              'main.lua',
+              'conf.lua',
+              'src/game.lua',
+              'vendor/kristal_legacy/battle.lua',
+              'assets/fonts/DeterminationMonoWebRegular-Z5oq.ttf'
+            )) {
+              if ($entries -notcontains $entry) {
+                throw "Missing package entry: $entry"
               }
             }
           }
