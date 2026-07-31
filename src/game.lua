@@ -16,7 +16,9 @@ local function loadFont(path, size)
         return font
     end
 
-    return love.graphics.newFont(size)
+    local fallback = love.graphics.newFont(size)
+    fallback:setFilter("nearest", "nearest")
+    return fallback
 end
 
 function Game:load()
