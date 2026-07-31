@@ -1,6 +1,8 @@
 local Game = require("src.game")
 local KristalErrorHandler = require("vendor.kristal_legacy.errorhandler")
+local Chapter1Integration = require("src.chapter1_integration")
 
+Chapter1Integration.apply(Game)
 love.errorhandler = KristalErrorHandler
 
 function love.load()
