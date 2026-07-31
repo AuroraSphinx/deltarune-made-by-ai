@@ -4,18 +4,22 @@ on:
   push:
     branches:
       - agent/use-determination-fonts
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/use-determination-fonts')
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out font branch
         uses: actions/checkout@v4
         with:
+          ref: agent/use-determination-fonts
           fetch-depth: 0
 
       - name: Decode and commit real assets
@@ -43,4 +47,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add assets/fonts assets/ui "$payload"
           git commit -m "Add Determination font assets"
-          git push
+          git push origin HEAD:agent/use-determination-fonts
