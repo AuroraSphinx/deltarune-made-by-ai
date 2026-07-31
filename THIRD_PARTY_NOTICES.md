@@ -37,3 +37,6 @@ redistributed because its license prohibits distribution of the font software.
 - Font title: Deltarune
 - Source: `https://fontstruct.com/fontstructions/show/1577621`
 - Use in this repository: rasterized title artwork only
+
+The required attribution is provided here in the project notices; no claim of
+affiliation with or endorsement by the font designer is made.
