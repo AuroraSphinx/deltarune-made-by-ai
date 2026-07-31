@@ -4,6 +4,8 @@ local Assets = {
     images = {},
 }
 
+local currentFilter = "linear"
+
 local palette = {
     ["."] = {0, 0, 0, 0},
     H = {0.09, 0.10, 0.18, 1},
@@ -19,6 +21,10 @@ local palette = {
     O = {0.83, 0.42, 0.12, 1},
     K = {0.08, 0.08, 0.10, 1},
 }
+
+local function applyFilter(image)
+    image:setFilter(currentFilter, currentFilter)
+end
 
 local function imageFromGrid(rows)
     local height = #rows
@@ -36,14 +42,14 @@ local function imageFromGrid(rows)
     end
 
     local image = love.graphics.newImage(imageData)
-    image:setFilter("nearest", "nearest")
+    applyFilter(image)
     return image
 end
 
 local function loadOptional(path, fallbackKey)
     if love.filesystem.getInfo(path, "file") then
         local image = love.graphics.newImage(path)
-        image:setFilter("nearest", "nearest")
+        applyFilter(image)
         return image, false
     end
     return imageFromGrid(PlaceholderData[fallbackKey]), true
@@ -67,6 +73,14 @@ function Assets:load()
             placeholder = placeholder,
             scale = placeholder and 2 or 1,
         }
+    end
+end
+
+function Assets:setFilter(mode)
+    if mode ~= "linear" and mode ~= "nearest" then return end
+    currentFilter = mode
+    for _, asset in pairs(self.images) do
+        applyFilter(asset.image)
     end
 end
 
