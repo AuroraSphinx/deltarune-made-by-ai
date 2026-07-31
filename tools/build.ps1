@@ -4,6 +4,9 @@ param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
 $Root = Split-Path -Parent $PSScriptRoot
 $BuildDir = Join-Path $Root "build"
 $ReleaseOut = Join-Path $BuildDir "release"
@@ -27,6 +30,22 @@ function Require-RepoPath {
     $fullPath = Join-Path $Root $RelativePath
     if (-not (Test-Path -LiteralPath $fullPath)) {
         throw "Missing $Description at: $fullPath"
+    }
+}
+
+function Assert-OutputFile {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$Description was not created at: $Path"
+    }
+
+    $length = (Get-Item -LiteralPath $Path).Length
+    if ($length -le 0) {
+        throw "$Description is empty at: $Path"
     }
 }
 
@@ -63,20 +82,51 @@ function New-LovePackage {
         [string]$OutputFile
     )
 
-    $zipFile = [IO.Path]::ChangeExtension($OutputFile, ".zip")
-    if (Test-Path -LiteralPath $zipFile) {
-        Remove-Item -LiteralPath $zipFile -Force
-    }
     if (Test-Path -LiteralPath $OutputFile) {
         Remove-Item -LiteralPath $OutputFile -Force
     }
 
-    Compress-Archive -Path (Join-Path $StageDirectory "*") -DestinationPath $zipFile -CompressionLevel Optimal -Force
-    Move-Item -LiteralPath $zipFile -Destination $OutputFile -Force
+    $outputStream = [IO.File]::Open($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new(
+            $outputStream,
+            [IO.Compression.ZipArchiveMode]::Create,
+            $false
+        )
+        try {
+            $files = @(Get-ChildItem -LiteralPath $StageDirectory -Recurse -File)
+            if ($files.Count -eq 0) {
+                throw "No files were staged for $OutputFile"
+            }
+
+            foreach ($file in $files) {
+                $relativePath = $file.FullName.Substring($StageDirectory.Length).TrimStart([char[]]"\/")
+                $entryName = $relativePath.Replace('\', '/')
+                [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                    $archive,
+                    $file.FullName,
+                    $entryName,
+                    [IO.Compression.CompressionLevel]::Optimal
+                ) | Out-Null
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $outputStream.Dispose()
+    }
+
+    Assert-OutputFile -Path $OutputFile -Description "LOVE package"
 }
 
 function Find-LoveExecutable {
     $candidates = New-Object System.Collections.Generic.List[string]
+
+    if ($env:LOVE_EXE) {
+        $candidates.Add($env:LOVE_EXE)
+    }
 
     $programFiles64 = [Environment]::GetFolderPath("ProgramFiles")
     $programFiles32 = [Environment]::GetFolderPath("ProgramFilesX86")
@@ -97,11 +147,10 @@ function Find-LoveExecutable {
         $candidates.Add($pathCommand.Source)
     }
 
-    $legacyBootstrap = Join-Path $Root "DeltaruneBuild\deltarune.exe"
-    $candidates.Add($legacyBootstrap)
+    $candidates.Add((Join-Path $Root "DeltaruneBuild\deltarune.exe"))
 
     foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
@@ -131,6 +180,8 @@ function Join-BinaryFiles {
     finally {
         $output.Dispose()
     }
+
+    Assert-OutputFile -Path $OutputFile -Description "Fused executable"
 }
 
 function Copy-LoveRuntime {
@@ -151,6 +202,8 @@ function Copy-LoveRuntime {
 
     return $dlls.Count
 }
+
+$buildSucceeded = $false
 
 try {
     Set-Location -LiteralPath $Root
@@ -245,7 +298,7 @@ try {
         Write-Host ("  " + (Join-Path $DebugOut "debug-deltarune.exe"))
     }
 
-    exit 0
+    $buildSucceeded = $true
 }
 catch {
     Write-Host ""
@@ -256,7 +309,6 @@ catch {
     if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
         Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
     }
-    exit 1
 }
 finally {
     foreach ($temporaryPath in @($ReleaseStage, $DebugStage, $BootExe)) {
@@ -265,3 +317,8 @@ finally {
         }
     }
 }
+
+if ($buildSucceeded) {
+    exit 0
+}
+exit 1
