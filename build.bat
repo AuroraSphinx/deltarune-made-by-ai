@@ -154,7 +154,7 @@ call :cleanup
 echo.
 echo ========================================
 echo BUILD FAILED
-ECHO ========================================
+echo ========================================
 echo Check the error printed above. The window will stay open.
 echo.
 if "%NO_PAUSE%"=="0" pause
@@ -174,7 +174,7 @@ exit /b 1
 
 :find_love
 if exist "%ProgramFiles%\LOVE\love.exe" set "LOVE_EXE=%ProgramFiles%\LOVE\love.exe"
-if not defined LOVE_EXE if defined ProgramFiles(x86) if exist "%ProgramFiles(x86)%\LOVE\love.exe" set "LOVE_EXE=%ProgramFiles(x86)%\LOVE\love.exe"
+if not defined LOVE_EXE if exist "%ProgramFiles(x86)%\LOVE\love.exe" set "LOVE_EXE=%ProgramFiles(x86)%\LOVE\love.exe"
 if not defined LOVE_EXE if exist "%LOCALAPPDATA%\Programs\LOVE\love.exe" set "LOVE_EXE=%LOCALAPPDATA%\Programs\LOVE\love.exe"
 if not defined LOVE_EXE if exist "%LOCALAPPDATA%\LOVE\love.exe" set "LOVE_EXE=%LOCALAPPDATA%\LOVE\love.exe"
 if not defined LOVE_EXE for /F "delims=" %%L in ('where love.exe 2^>nul') do if not defined LOVE_EXE set "LOVE_EXE=%%L"
