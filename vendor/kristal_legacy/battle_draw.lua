@@ -1,153 +1,131 @@
--- Deltarune-inspired battle renderer for the existing 320x240 canvas.
--- The state machine and battle logic remain in the Kristal-derived port; this
--- file only owns layout, colors, icons, battlers, and HUD presentation.
+-- Battle HUD renderer matched to the supplied compact Deltarune references.
+-- Battle logic/state remains in the Kristal-derived runtime; this file only draws.
 local Battle = require("vendor.kristal_legacy.battle_update")
 local ctx = Battle._ctx
 local Util = ctx.Util
 local SW, SH = ctx.SW, ctx.SH
-local UI_TOP, STATUS_TOP = ctx.UI_TOP, ctx.STATUS_TOP
+local UI_TOP = ctx.UI_TOP
 local COLORS = ctx.COLORS
 local setColor = ctx.setColor
 local drawHeart = ctx.drawHeart
 local drawOutlinedRect = ctx.drawOutlinedRect
 
-local TP_X = 282
-local TP_W = SW - TP_X
-local PARTY_PANEL_W = 94
-local PORTRAIT_W = 42
-local COMMAND_W = 48
-local BATTLE_POSITIONS = {
-    {82, 119},
-    {126, 98},
-    {170, 119},
-}
+local FIELD_BOTTOM = UI_TOP
+local STATUS_Y = UI_TOP + 1
+local STATUS_H = 19
+local COMMAND_Y = STATUS_Y + STATUS_H + 1
+local COMMAND_H = 20
+local DIALOGUE_Y = COMMAND_Y + COMMAND_H + 1
+local DIALOGUE_H = SH - DIALOGUE_Y
 
 local ACTION_STYLES = {
-    FIGHT = {
-        dark = {0.36, 0.055, 0.025, 1},
-        bright = {1.00, 0.28, 0.08, 1},
-    },
-    ACT = {
-        dark = {0.36, 0.27, 0.015, 1},
-        bright = {1.00, 0.82, 0.05, 1},
-    },
-    MAGIC = {
-        dark = {0.28, 0.09, 0.36, 1},
-        bright = {0.73, 0.32, 1.00, 1},
-    },
-    ITEM = {
-        dark = {0.025, 0.28, 0.075, 1},
-        bright = {0.20, 1.00, 0.36, 1},
-    },
-    SPARE = {
-        dark = {0.34, 0.07, 0.19, 1},
-        bright = {1.00, 0.28, 0.68, 1},
-    },
-    DEFEND = {
-        dark = {0.02, 0.23, 0.29, 1},
-        bright = {0.20, 0.92, 1.00, 1},
-    },
+    FIGHT = {0.98, 0.74, 0.05, 1},
+    ACT = {1.00, 0.50, 0.18, 1},
+    MAGIC = {0.70, 0.35, 1.00, 1},
+    ITEM = {0.22, 1.00, 0.38, 1},
+    SPARE = {1.00, 0.34, 0.72, 1},
+    DEFEND = {0.18, 0.92, 1.00, 1},
 }
 
-local function shade(color, amount, alpha)
+local function shade(color, factor, alpha)
     return {
-        Util.clamp(color[1] * amount, 0, 1),
-        Util.clamp(color[2] * amount, 0, 1),
-        Util.clamp(color[3] * amount, 0, 1),
+        Util.clamp(color[1] * factor, 0, 1),
+        Util.clamp(color[2] * factor, 0, 1),
+        Util.clamp(color[3] * factor, 0, 1),
         alpha or color[4] or 1,
     }
+end
+
+local function getPartyPositions(count)
+    if count <= 1 then
+        return {{72, 100}}
+    elseif count == 2 then
+        return {{65, 105}, {125, 84}}
+    end
+    return {{57, 108}, {105, 84}, {151, 108}}
+end
+
+local function getStatusLayout(count)
+    if count <= 1 then
+        return 101, 118, 0
+    elseif count == 2 then
+        return 54, 106, 8
+    end
+    return 35, 88, 5
 end
 
 local function drawSpark(cx, cy, radius)
     love.graphics.polygon(
         "fill",
         cx, cy - radius,
-        cx + radius * 0.30, cy - radius * 0.30,
+        cx + radius * 0.3, cy - radius * 0.3,
         cx + radius, cy,
-        cx + radius * 0.30, cy + radius * 0.30,
+        cx + radius * 0.3, cy + radius * 0.3,
         cx, cy + radius,
-        cx - radius * 0.30, cy + radius * 0.30,
+        cx - radius * 0.3, cy + radius * 0.3,
         cx - radius, cy,
-        cx - radius * 0.30, cy - radius * 0.30
+        cx - radius * 0.3, cy - radius * 0.3
     )
 end
 
 local function drawActionIcon(action, cx, cy, color)
     setColor(color)
-    love.graphics.setLineWidth(2)
+    love.graphics.setLineWidth(1)
 
     if action == "FIGHT" then
         love.graphics.push()
         love.graphics.translate(cx, cy)
         love.graphics.rotate(-0.72)
-        love.graphics.rectangle("fill", -2, -10, 4, 17)
-        love.graphics.rectangle("fill", -7, 5, 14, 3)
-        love.graphics.rectangle("fill", -2, 7, 4, 6)
+        love.graphics.rectangle("fill", -1, -6, 2, 10)
+        love.graphics.rectangle("fill", -4, 3, 8, 2)
+        love.graphics.rectangle("fill", -1, 4, 2, 4)
         love.graphics.pop()
-
     elseif action == "ACT" then
-        drawSpark(cx, cy, 10)
+        drawSpark(cx, cy, 6)
         setColor(COLORS.black)
-        drawSpark(cx, cy, 4)
-
+        drawSpark(cx, cy, 2)
     elseif action == "MAGIC" then
-        love.graphics.circle("line", cx, cy, 9)
-        love.graphics.circle("fill", cx, cy, 3)
-        love.graphics.line(cx - 11, cy + 9, cx + 9, cy - 11)
-        love.graphics.circle("fill", cx + 9, cy - 11, 2)
-
+        love.graphics.circle("line", cx, cy, 5)
+        love.graphics.circle("fill", cx, cy, 1)
+        love.graphics.line(cx - 6, cy + 5, cx + 5, cy - 6)
     elseif action == "ITEM" then
-        love.graphics.rectangle("line", cx - 9, cy - 4, 18, 14, 2, 2)
-        love.graphics.arc("line", "open", cx, cy - 4, 6, math.pi, math.pi * 2)
-        love.graphics.rectangle("fill", cx - 2, cy + 1, 4, 5)
-
+        love.graphics.rectangle("line", cx - 5, cy - 2, 10, 8)
+        love.graphics.arc("line", "open", cx, cy - 2, 3, math.pi, math.pi * 2)
+        love.graphics.rectangle("fill", cx - 1, cy + 1, 2, 3)
     elseif action == "SPARE" then
-        love.graphics.polygon(
-            "line",
-            cx, cy - 11,
-            cx + 10, cy,
-            cx, cy + 11,
-            cx - 10, cy
-        )
-        love.graphics.line(cx - 7, cy, cx + 7, cy)
-        love.graphics.line(cx, cy - 7, cx, cy + 7)
-
+        love.graphics.polygon("line", cx, cy - 6, cx + 6, cy, cx, cy + 6, cx - 6, cy)
+        love.graphics.line(cx - 4, cy, cx + 4, cy)
+        love.graphics.line(cx, cy - 4, cx, cy + 4)
     elseif action == "DEFEND" then
         love.graphics.polygon(
             "line",
-            cx, cy - 11,
-            cx + 9, cy - 7,
-            cx + 7, cy + 5,
-            cx, cy + 11,
-            cx - 7, cy + 5,
-            cx - 9, cy - 7
+            cx, cy - 6,
+            cx + 5, cy - 4,
+            cx + 4, cy + 3,
+            cx, cy + 6,
+            cx - 4, cy + 3,
+            cx - 5, cy - 4
         )
-        love.graphics.line(cx, cy - 7, cx, cy + 7)
     end
 end
 
 function Battle:drawBackground()
     local alpha = self.state == "TRANSITION" and self.transitionTimer or 1
-    love.graphics.clear(0.012, 0.003, 0.022, 1)
-
+    love.graphics.clear(0.008, 0.002, 0.014, 1)
     love.graphics.setLineWidth(1)
-    for x = -40, SW + 40, 24 do
-        setColor({0.28, 0.015, 0.35, alpha * 0.68})
-        love.graphics.line(
-            x + self.backgroundOffset,
-            0,
-            x - 38 + self.backgroundOffset,
-            UI_TOP
-        )
+
+    for x = -30, SW + 30, 24 do
+        setColor({0.21, 0.015, 0.27, alpha * 0.7})
+        love.graphics.line(x + self.backgroundOffset, 0, x - 25 + self.backgroundOffset, FIELD_BOTTOM)
     end
 
-    for y = 8, UI_TOP, 18 do
-        setColor({0.15, 0.005, 0.22, alpha * 0.65})
+    for y = 12, FIELD_BOTTOM, 18 do
+        setColor({0.16, 0.01, 0.21, alpha * 0.7})
         love.graphics.line(0, y, SW, y)
     end
 
-    setColor({0.46, 0.04, 0.55, alpha * 0.75})
-    love.graphics.line(0, UI_TOP - 1, SW, UI_TOP - 1)
+    setColor({0.35, 0.28, 0.38, 1})
+    love.graphics.rectangle("fill", 4, FIELD_BOTTOM - 1, SW - 8, 1)
 end
 
 function Battle:drawRalsei(x, y, animationTimer)
@@ -174,11 +152,9 @@ function Battle:drawPartyMember(member, x, y)
         bob = 4
     end
 
-    local visible = member.flash <= 0 or math.floor(member.flash * 14) % 2 == 0
-    if not visible then return end
-
-    setColor({0, 0, 0, 0.45})
-    love.graphics.ellipse("fill", x, y + 13, 13, 4)
+    if member.flash > 0 and math.floor(member.flash * 14) % 2 ~= 0 then
+        return
+    end
 
     if member.id == "kris" then
         self.assets:draw("hero_down", x, y + bob, {centered = true})
@@ -195,26 +171,19 @@ function Battle:drawPartyMember(member, x, y)
 end
 
 function Battle:drawBattlers()
+    local positions = getPartyPositions(#self.party)
     local transitionAmount = self.state == "TRANSITION" and self.transitionTimer or 1
-    local partySlide = (1 - transitionAmount) * -110
+    local partySlide = (1 - transitionAmount) * -95
 
     for index, member in ipairs(self.party) do
-        local position = BATTLE_POSITIONS[index]
+        local position = positions[index] or positions[#positions]
         self:drawPartyMember(member, position[1] + partySlide, position[2])
-
-        if self.state == "ACTIONSELECT" and index == self.currentSelecting then
-            setColor(member.color, 0.45 + math.sin(member.animationTimer * 8) * 0.15)
-            love.graphics.ellipse("line", position[1] + partySlide, position[2] + 14, 15, 5)
-        end
     end
 
-    local enemyX = 246 + (1 - transitionAmount) * 110
+    local enemyX = 244 + (1 - transitionAmount) * 105
     local enemyY = 91 + math.sin(self.enemy.animationTimer * 2.8) * 2
     if not self.enemy.spared and not self.enemy.defeated then
-        setColor({0, 0, 0, 0.45})
-        love.graphics.ellipse("fill", enemyX, enemyY + 18, 18, 5)
         self.assets:draw("enemy", enemyX, enemyY, {centered = true})
-
         if self.enemy.tired then
             love.graphics.setFont(self.fonts.small)
             setColor(COLORS.blue)
@@ -224,215 +193,199 @@ function Battle:drawBattlers()
     end
 end
 
-function Battle:drawCommandPortrait(member)
-    setColor(shade(member.color, 0.22))
-    love.graphics.rectangle("fill", 0, UI_TOP, PORTRAIT_W, STATUS_TOP - UI_TOP)
-
-    setColor(shade(member.color, 0.72))
-    love.graphics.rectangle("fill", 2, UI_TOP + 2, PORTRAIT_W - 4, STATUS_TOP - UI_TOP - 4)
-
-    local cx = math.floor(PORTRAIT_W / 2)
-    local cy = UI_TOP + 18
-
-    if member.id == "kris" then
-        setColor({0.11, 0.18, 0.35, 1})
-        love.graphics.rectangle("fill", cx - 9, cy - 10, 18, 19)
-        setColor({0.10, 0.47, 0.68, 1})
-        love.graphics.rectangle("fill", cx - 8, cy - 4, 16, 12)
-        setColor({0.05, 0.08, 0.18, 1})
-        love.graphics.polygon("fill", cx - 10, cy - 10, cx + 10, cy - 10, cx + 8, cy - 1, cx - 8, cy + 1)
-
-    elseif member.id == "susie" then
-        setColor({0.48, 0.10, 0.40, 1})
-        love.graphics.polygon("fill", cx - 10, cy - 10, cx + 7, cy - 10, cx + 10, cy + 8, cx - 8, cy + 9)
-        setColor({0.96, 0.78, 0.30, 1})
-        love.graphics.rectangle("fill", cx + 2, cy, 6, 2)
-        setColor(COLORS.white)
-        love.graphics.rectangle("fill", cx + 2, cy + 4, 6, 2)
-
-    else
-        setColor({0.03, 0.11, 0.07, 1})
-        love.graphics.polygon("fill", cx, cy - 13, cx - 12, cy - 1, cx + 12, cy - 1)
-        setColor({0.36, 0.95, 0.55, 1})
-        love.graphics.rectangle("fill", cx - 8, cy - 3, 16, 12)
-        setColor({0.05, 0.08, 0.08, 1})
-        love.graphics.rectangle("fill", cx - 5, cy, 10, 3)
-        setColor({1.00, 0.28, 0.62, 1})
-        love.graphics.rectangle("fill", cx - 8, cy + 8, 16, 2)
-    end
+function Battle:drawTensionBar()
+    local labelX = 7
+    local gaugeX = 24
+    local gaugeY = 27
+    local gaugeW = 9
+    local gaugeH = 89
 
     love.graphics.setFont(self.fonts.tiny)
     setColor(COLORS.white)
-    love.graphics.printf(member.name, 0, UI_TOP + 31, PORTRAIT_W, "center")
-end
+    love.graphics.printf("T", labelX, 39, 10, "center")
+    love.graphics.printf("P", labelX, 51, 10, "center")
+    love.graphics.printf(tostring(math.floor(self.tension)), labelX - 1, 65, 13, "center")
+    love.graphics.printf("%", labelX, 78, 10, "center")
 
-function Battle:drawTensionBar()
-    local y = UI_TOP
-    local h = SH - UI_TOP
-    local gaugeX = TP_X + 8
-    local gaugeY = UI_TOP + 6
-    local gaugeW = 12
-    local gaugeH = h - 25
-
-    setColor({0.08, 0.025, 0.015, 1})
-    love.graphics.rectangle("fill", TP_X, y, TP_W, h)
-    setColor({0.55, 0.19, 0.02, 1})
-    love.graphics.rectangle("fill", TP_X, y, 2, h)
-
-    setColor({0.34, 0.08, 0.01, 1})
-    love.graphics.rectangle("fill", gaugeX, gaugeY, gaugeW, gaugeH)
+    setColor({0.33, 0.015, 0.01, 1})
+    love.graphics.polygon(
+        "fill",
+        gaugeX, gaugeY + 7,
+        gaugeX + gaugeW, gaugeY,
+        gaugeX + gaugeW, gaugeY + gaugeH - 7,
+        gaugeX, gaugeY + gaugeH
+    )
 
     local ratio = Util.clamp(self.tension / self.maxTension, 0, 1)
-    local fill = math.floor((gaugeH - 4) * ratio)
-    local gaugeColor = self.tension >= self.maxTension and COLORS.yellow or COLORS.orange
-    setColor(gaugeColor)
-    love.graphics.rectangle("fill", gaugeX + 2, gaugeY + gaugeH - 2 - fill, gaugeW - 4, fill)
+    local fillHeight = math.floor((gaugeH - 12) * ratio)
+    if fillHeight > 0 then
+        setColor(self.tension >= self.maxTension and COLORS.yellow or COLORS.orange)
+        love.graphics.rectangle(
+            "fill",
+            gaugeX + 2,
+            gaugeY + gaugeH - 7 - fillHeight,
+            gaugeW - 4,
+            fillHeight
+        )
+    end
 
-    setColor(self.tensionFlash > 0 and COLORS.white or COLORS.orange)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", gaugeX, gaugeY, gaugeW, gaugeH)
-
-    love.graphics.setFont(self.fonts.tiny)
-    setColor(COLORS.white)
-    love.graphics.printf(tostring(math.floor(self.tension)) .. "%", TP_X, UI_TOP + 3, TP_W, "center")
-    setColor(COLORS.orange)
-    love.graphics.printf("TP", TP_X, SH - 13, TP_W, "center")
+    if self.tensionFlash > 0 then
+        setColor(COLORS.white)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(gaugeX, gaugeY + 7, gaugeX + gaugeW, gaugeY)
+        love.graphics.line(gaugeX + gaugeW, gaugeY, gaugeX + gaugeW, gaugeY + gaugeH - 7)
+        love.graphics.line(gaugeX + gaugeW, gaugeY + gaugeH - 7, gaugeX, gaugeY + gaugeH)
+    end
 end
 
-function Battle:drawEnemyInfo()
-    if self.state ~= "ENEMYSELECT" and self.state ~= "MENUSELECT" then return end
+local function drawMiniPortrait(member, x, y)
+    setColor(shade(member.color, 0.36))
+    love.graphics.circle("fill", x, y, 7)
+    setColor(member.color)
 
-    local x, y, w = 177, 126, 132
-    setColor({0, 0, 0, 0.72})
-    love.graphics.rectangle("fill", x - 4, y - 4, w + 8, 28)
+    if member.id == "kris" then
+        love.graphics.rectangle("fill", x - 4, y - 3, 8, 6)
+        setColor({0.06, 0.08, 0.18, 1})
+        love.graphics.rectangle("fill", x - 5, y - 5, 10, 3)
+    elseif member.id == "susie" then
+        love.graphics.polygon("fill", x - 5, y - 5, x + 3, y - 5, x + 5, y + 5, x - 4, y + 5)
+    else
+        love.graphics.polygon("fill", x, y - 6, x - 6, y, x + 6, y)
+        love.graphics.rectangle("fill", x - 4, y, 8, 5)
+    end
+end
+
+function Battle:drawOneStatusPanel(member, index, x, y, w, selected)
+    local panelColor = member.down and COLORS.red or member.color
+
+    setColor(COLORS.black)
+    love.graphics.rectangle("fill", x, y, w, STATUS_H)
+
+    setColor(shade(panelColor, 0.24))
+    love.graphics.rectangle("fill", x + 1, y + 1, w - 2, STATUS_H - 2)
+
+    if selected then
+        setColor(panelColor)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", x, y, w, STATUS_H)
+        setColor(COLORS.white)
+        love.graphics.rectangle("line", x + 2, y + 2, w - 4, STATUS_H - 4)
+    else
+        setColor(shade(panelColor, 0.72))
+        love.graphics.rectangle("line", x, y, w, STATUS_H)
+    end
+
+    drawMiniPortrait(member, x + 12, y + 9)
 
     love.graphics.setFont(self.fonts.small)
     setColor(COLORS.white)
-    love.graphics.printf(self.enemy.name, x, y, w, "center")
+    love.graphics.print(member.name, x + 23, y + 2)
 
-    setColor({0.25, 0.05, 0.05, 1})
-    love.graphics.rectangle("fill", x + 15, y + 13, w - 30, 4)
-    setColor(COLORS.green)
-    love.graphics.rectangle("fill", x + 15, y + 13, (w - 30) * (self.enemy.hp / self.enemy.maxHp), 4)
+    love.graphics.setFont(self.fonts.tiny)
+    setColor(COLORS.white)
+    love.graphics.print("HP", x + 23, y + 11)
+    love.graphics.print(tostring(member.hp) .. "/" .. tostring(member.maxHp), x + 36, y + 11)
 
-    if self.enemy.mercy > 0 then
-        love.graphics.setFont(self.fonts.tiny)
-        setColor(self.enemy.mercy >= 100 and COLORS.yellow or COLORS.orange)
-        love.graphics.printf("MERCY " .. self.enemy.mercy .. "%", x, y + 19, w, "center")
-    end
+    local barX = x + w - 29
+    local barY = y + 12
+    setColor({0.25, 0.02, 0.04, 1})
+    love.graphics.rectangle("fill", barX, barY, 25, 4)
+    setColor(member.hp <= member.maxHp * 0.25 and COLORS.yellow or COLORS.green)
+    love.graphics.rectangle("fill", barX, barY, 25 * Util.clamp(member.hp / member.maxHp, 0, 1), 4)
 
-    if self.state == "ENEMYSELECT" then
-        drawHeart(x + 7, y + 7, 0.7, COLORS.red)
+    if self.state == "PARTYSELECT" and index == self.currentTarget then
+        drawHeart(x + w - 8, y + 7, 0.45, COLORS.red)
+    elseif self:hasAction(index) then
+        setColor(panelColor)
+        drawSpark(x + w - 7, y + 6, 3)
     end
 end
 
 function Battle:drawStatusBoxes()
-    setColor({0.025, 0.01, 0.04, 1})
-    love.graphics.rectangle("fill", 0, STATUS_TOP, TP_X, SH - STATUS_TOP)
+    if self.state == "ATTACKING" then
+        return
+    end
+
+    local count = #self.party
+    local startX, panelW, gap = getStatusLayout(count)
 
     for index, member in ipairs(self.party) do
-        local x = (index - 1) * PARTY_PANEL_W
-        local panelH = SH - STATUS_TOP
+        local x = startX + (index - 1) * (panelW + gap)
+        local selected = self.state == "ACTIONSELECT" and index == self.currentSelecting
+        self:drawOneStatusPanel(member, index, x, STATUS_Y, panelW, selected)
+    end
+end
 
-        setColor(shade(member.color, 0.12))
-        love.graphics.rectangle("fill", x, STATUS_TOP, PARTY_PANEL_W, panelH)
+function Battle:drawCommandButtons()
+    if self.state ~= "ACTIONSELECT" then
+        return
+    end
 
-        setColor(shade(member.color, 0.62))
-        love.graphics.rectangle("fill", x, STATUS_TOP, PARTY_PANEL_W, 2)
+    local member = self:getCurrentParty()
+    if not member then
+        return
+    end
 
-        if index > 1 then
-            setColor({0.25, 0.15, 0.31, 1})
-            love.graphics.rectangle("fill", x, STATUS_TOP, 1, panelH)
-        end
+    local count = #self.party
+    local startX, panelW, gap = getStatusLayout(count)
+    local statusX = startX + (self.currentSelecting - 1) * (panelW + gap)
+    local options = self:getActionOptions(member)
+    local buttonW = 20
+    local buttonGap = 2
+    local totalW = #options * buttonW + (#options - 1) * buttonGap
+    local rowX = math.floor(statusX + panelW / 2 - totalW / 2)
+    rowX = Util.clamp(rowX, 38, SW - totalW - 4)
 
-        love.graphics.setFont(self.fonts.small)
-        setColor(member.down and COLORS.red or member.color)
-        love.graphics.print(member.name, x + 6, STATUS_TOP + 4)
+    for index, option in ipairs(options) do
+        local x = rowX + (index - 1) * (buttonW + buttonGap)
+        local selected = index == self.currentButton
+        local color = ACTION_STYLES[option] or member.color
+
+        setColor(COLORS.black)
+        love.graphics.rectangle("fill", x, COMMAND_Y, buttonW, COMMAND_H)
+
+        setColor(selected and COLORS.white or color)
+        love.graphics.setLineWidth(selected and 2 or 1)
+        love.graphics.rectangle("line", x, COMMAND_Y, buttonW, COMMAND_H)
+
+        drawActionIcon(option, x + buttonW / 2, COMMAND_Y + 7, color)
 
         love.graphics.setFont(self.fonts.tiny)
-        setColor(COLORS.white)
-        love.graphics.print("HP", x + 6, STATUS_TOP + 19)
-        love.graphics.print(tostring(member.hp), x + 24, STATUS_TOP + 19)
-        setColor({0.55, 0.48, 0.62, 1})
-        love.graphics.print("/" .. tostring(member.maxHp), x + 45, STATUS_TOP + 19)
+        setColor(selected and COLORS.white or color)
+        love.graphics.printf(option, x - 3, COMMAND_Y + 13, buttonW + 6, "center")
 
-        setColor({0.30, 0.02, 0.04, 1})
-        love.graphics.rectangle("fill", x + 65, STATUS_TOP + 21, 23, 4)
-        setColor(member.hp <= member.maxHp * 0.25 and COLORS.yellow or COLORS.green)
-        love.graphics.rectangle("fill", x + 65, STATUS_TOP + 21, 23 * Util.clamp(member.hp / member.maxHp, 0, 1), 4)
-
-        if self.state == "ACTIONSELECT" and index == self.currentSelecting then
-            setColor(COLORS.white)
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", x + 2, STATUS_TOP + 2, PARTY_PANEL_W - 4, panelH - 4)
-        elseif self.state == "PARTYSELECT" and index == self.currentTarget then
-            drawHeart(x + PARTY_PANEL_W - 10, STATUS_TOP + 10, 0.62, COLORS.red)
-        elseif self:hasAction(index) then
-            setColor(member.color)
-            drawSpark(x + PARTY_PANEL_W - 9, STATUS_TOP + 9, 4)
+        if selected then
+            drawHeart(x + 3, COMMAND_Y + 4, 0.32, COLORS.red)
         end
     end
 end
 
-function Battle:drawActionButtons()
+function Battle:drawDialogueBox()
+    if self.state == "ATTACKING" then
+        return
+    end
+
     setColor(COLORS.black)
-    love.graphics.rectangle("fill", 0, UI_TOP, TP_X, STATUS_TOP - UI_TOP)
-    setColor({0.46, 0.05, 0.55, 1})
-    love.graphics.rectangle("fill", 0, UI_TOP, TP_X, 2)
+    love.graphics.rectangle("fill", 0, DIALOGUE_Y, SW, DIALOGUE_H)
+    setColor({0.34, 0.28, 0.38, 1})
+    love.graphics.rectangle("fill", 4, DIALOGUE_Y, SW - 8, 1)
 
     if self.state == "ACTIONSELECT" then
-        local member = self:getCurrentParty()
-        local options = self:getActionOptions(member)
-        self:drawCommandPortrait(member)
-
-        for index, option in ipairs(options) do
-            local x = PORTRAIT_W + (index - 1) * COMMAND_W
-            local selected = index == self.currentButton
-            local style = ACTION_STYLES[option] or {
-                dark = shade(member.color, 0.25),
-                bright = member.color,
-            }
-
-            setColor(selected and style.bright or style.dark)
-            love.graphics.rectangle("fill", x, UI_TOP + 2, COMMAND_W, STATUS_TOP - UI_TOP - 2)
-
-            if index > 1 then
-                setColor({0.02, 0.01, 0.03, 0.90})
-                love.graphics.rectangle("fill", x, UI_TOP + 2, 1, STATUS_TOP - UI_TOP - 2)
-            end
-
-            local iconColor = selected and COLORS.white or shade(style.bright, 0.92)
-            drawActionIcon(option, x + COMMAND_W / 2, UI_TOP + 18, iconColor)
-
-            love.graphics.setFont(self.fonts.tiny)
-            setColor(selected and COLORS.white or shade(style.bright, 0.85))
-            love.graphics.printf(option, x, UI_TOP + 31, COMMAND_W, "center")
-
-            if selected then
-                setColor(COLORS.white)
-                love.graphics.setLineWidth(2)
-                love.graphics.rectangle("line", x + 1, UI_TOP + 3, COMMAND_W - 2, STATUS_TOP - UI_TOP - 5)
-                drawHeart(x + 7, UI_TOP + 8, 0.42, COLORS.red)
-            end
-        end
-
-        setColor({0, 0, 0, 0.74})
-        love.graphics.rectangle("fill", 0, UI_TOP - 17, TP_X, 16)
-        love.graphics.setFont(self.fonts.tiny)
+        love.graphics.setFont(self.fonts.normal)
         setColor(COLORS.white)
-        love.graphics.printf(self.encounterText, 7, UI_TOP - 14, TP_X - 14, "center")
+        love.graphics.printf(self.encounterText, 17, DIALOGUE_Y + 9, SW - 28, "left")
 
     elseif self.state == "MENUSELECT" and self.currentMenu then
         love.graphics.setFont(self.fonts.small)
         for index, entry in ipairs(self.currentMenu.entries) do
             local column = (index - 1) % 2
             local row = math.floor((index - 1) / 2)
-            local x = 20 + column * 136
-            local y = UI_TOP + 7 + row * 15
+            local x = 27 + column * 145
+            local y = DIALOGUE_Y + 6 + row * 13
             local unusable = entry.unusable or ((entry.tp or 0) > self.tension)
 
             if index == self.currentMenuIndex then
-                drawHeart(x - 8, y + 5, 0.5, COLORS.red)
+                drawHeart(x - 9, y + 5, 0.45, COLORS.red)
             end
 
             setColor(unusable and COLORS.gray or COLORS.white)
@@ -441,7 +394,7 @@ function Battle:drawActionButtons()
             if entry.tp then
                 love.graphics.setFont(self.fonts.tiny)
                 setColor(unusable and COLORS.gray or COLORS.orange)
-                love.graphics.print(tostring(entry.tp) .. "% TP", x + 79, y + 2)
+                love.graphics.print(tostring(entry.tp) .. "% TP", x + 83, y + 2)
                 love.graphics.setFont(self.fonts.small)
             end
         end
@@ -449,39 +402,64 @@ function Battle:drawActionButtons()
     elseif self.state == "ENEMYSELECT" then
         love.graphics.setFont(self.fonts.normal)
         setColor(COLORS.white)
-        love.graphics.print("* " .. self.enemy.name, 24, UI_TOP + 13)
-        drawHeart(14, UI_TOP + 20, 0.55, COLORS.red)
+        drawHeart(18, DIALOGUE_Y + 15, 0.5, COLORS.red)
+        love.graphics.print("* " .. self.enemy.name, 29, DIALOGUE_Y + 8)
+
+        love.graphics.setFont(self.fonts.tiny)
+        setColor({0.25, 0.04, 0.05, 1})
+        love.graphics.rectangle("fill", 29, DIALOGUE_Y + 25, 112, 4)
+        setColor(COLORS.green)
+        love.graphics.rectangle(
+            "fill",
+            29,
+            DIALOGUE_Y + 25,
+            112 * Util.clamp(self.enemy.hp / self.enemy.maxHp, 0, 1),
+            4
+        )
+
+        if self.enemy.mercy > 0 then
+            setColor(self.enemy.mercy >= 100 and COLORS.yellow or COLORS.orange)
+            love.graphics.print("MERCY " .. self.enemy.mercy .. "%", 154, DIALOGUE_Y + 22)
+        end
 
     elseif self.state == "PARTYSELECT" then
         love.graphics.setFont(self.fonts.normal)
         setColor(COLORS.white)
-        love.graphics.print("* Choose a party member.", 22, UI_TOP + 13)
+        love.graphics.print("* Choose a party member.", 18, DIALOGUE_Y + 9)
 
     elseif self.state == "BATTLETEXT" then
         love.graphics.setFont(self.fonts.normal)
         setColor(COLORS.white)
-        love.graphics.printf(self.textLines[self.textIndex] or "", 13, UI_TOP + 7, TP_X - 26, "left")
+        love.graphics.printf(self.textLines[self.textIndex] or "", 17, DIALOGUE_Y + 7, SW - 30, "left")
 
     elseif self.state == "ENEMYDIALOGUE" then
         love.graphics.setFont(self.fonts.normal)
         setColor(COLORS.white)
-        love.graphics.printf("* The enemy prepares an attack...", 13, UI_TOP + 13, TP_X - 26, "left")
+        love.graphics.print("* The enemy prepares an attack...", 17, DIALOGUE_Y + 9)
 
     elseif self.state == "DEFENDING" then
-        love.graphics.setFont(self.fonts.small)
-        setColor(COLORS.white)
         local target = self.party[self.targetedParty]
-        love.graphics.printf("TARGET: " .. target.name .. "   Graze bullets to earn TP!", 8, UI_TOP + 15, TP_X - 16, "center")
-
-    elseif self.state == "ATTACKING" then
         love.graphics.setFont(self.fonts.small)
         setColor(COLORS.white)
-        love.graphics.printf("Press Z as each line reaches the center!", 8, UI_TOP + 15, TP_X - 16, "center")
+        love.graphics.printf(
+            "TARGET: " .. target.name .. "   Graze bullets to earn TP!",
+            10,
+            DIALOGUE_Y + 11,
+            SW - 20,
+            "center"
+        )
     end
 end
 
+function Battle:drawEnemyInfo()
+    -- Enemy information is intentionally kept inside the dialogue box,
+    -- matching the compact references instead of floating over the field.
+end
+
 function Battle:drawArena()
-    if self.state ~= "DEFENDING" then return end
+    if self.state ~= "DEFENDING" then
+        return
+    end
 
     drawOutlinedRect(self.arena.x, self.arena.y, self.arena.w, self.arena.h, COLORS.black, COLORS.white, 2)
 
@@ -496,46 +474,84 @@ function Battle:drawArena()
 end
 
 function Battle:drawAttackTiming()
-    if self.state ~= "ATTACKING" then return end
+    if self.state ~= "ATTACKING" then
+        return
+    end
 
-    local x, y, w = 78, 66, 178
+    setColor(COLORS.black)
+    love.graphics.rectangle("fill", 0, UI_TOP, SW, SH - UI_TOP)
+    setColor({0.34, 0.28, 0.38, 1})
+    love.graphics.rectangle("fill", 10, UI_TOP, SW - 20, 1)
+
+    local laneCount = math.max(1, #self.attackLanes)
+    local rowH = math.floor((SH - UI_TOP - 4) / laneCount)
+
     for index, lane in ipairs(self.attackLanes) do
-        local laneY = y + (index - 1) * 25
-        setColor({0.13, 0.13, 0.18, 1})
-        love.graphics.rectangle("fill", x, laneY, w, 14)
-        setColor(COLORS.white)
-        love.graphics.rectangle("line", x, laneY, w, 14)
-        setColor(COLORS.yellow)
-        love.graphics.rectangle("fill", x + w / 2 - 2, laneY + 1, 4, 12)
-
-        local cursorX = x + Util.clamp(lane.position, 0, 1) * w
         local member = self.party[lane.action.character_id]
-        setColor(member.color)
-        love.graphics.rectangle("fill", cursorX - 2, laneY - 2, 4, 18)
+        local rowY = UI_TOP + 2 + (index - 1) * rowH
+        local statusY = rowY
+        local laneY = rowY + 13
+        local laneX = 47
+        local laneW = 112
+
+        drawMiniPortrait(member, 18, rowY + 9)
+
+        love.graphics.setFont(self.fonts.small)
+        setColor(COLORS.white)
+        love.graphics.print(member.name, 31, statusY + 1)
 
         love.graphics.setFont(self.fonts.tiny)
+        love.graphics.print("HP", 78, statusY + 4)
+        love.graphics.print(tostring(member.hp) .. "/" .. tostring(member.maxHp), 92, statusY + 4)
+
+        setColor({0.18, 0.18, 0.23, 1})
+        love.graphics.rectangle("fill", laneX, laneY, laneW, 9)
+        setColor(member.color)
+        love.graphics.rectangle("line", laneX, laneY, laneW, 9)
+
+        for marker = 1, 5 do
+            local markerX = laneX + math.floor(laneW * marker / 6)
+            setColor({0.32, 0.32, 0.36, 1})
+            love.graphics.rectangle("fill", markerX, laneY + 1, 2, 7)
+        end
+
         setColor(COLORS.white)
-        love.graphics.print(member.name, 20, laneY + 3)
+        love.graphics.rectangle("fill", laneX + math.floor(laneW / 2) - 1, laneY, 3, 9)
+
+        local cursorX = laneX + Util.clamp(lane.position, 0, 1) * laneW
+        setColor(member.color)
+        love.graphics.rectangle("fill", cursorX - 1, laneY - 2, 3, 13)
+
         if lane.stopped then
-            love.graphics.print(tostring(lane.damage), 264, laneY + 3)
+            love.graphics.setFont(self.fonts.small)
+            setColor(COLORS.white)
+            love.graphics.print(tostring(lane.damage), 172, laneY - 2)
+        else
+            love.graphics.setFont(self.fonts.tiny)
+            setColor(COLORS.white)
+            love.graphics.print("PRESS Z", 172, laneY)
         end
     end
 end
 
 function Battle:drawEnemyDialogue()
-    if self.state ~= "ENEMYDIALOGUE" or not self.enemyDialogue then return end
+    if self.state ~= "ENEMYDIALOGUE" or not self.enemyDialogue then
+        return
+    end
 
-    local x, y, w, h = 195, 24, 115, 37
+    local x, y, w, h = 198, 22, 108, 34
     drawOutlinedRect(x, y, w, h, COLORS.white, COLORS.black, 1)
     setColor(COLORS.white)
-    love.graphics.polygon("fill", x + 28, y + h, x + 36, y + h, x + 32, y + h + 7)
+    love.graphics.polygon("fill", x + 27, y + h, x + 35, y + h, x + 31, y + h + 7)
     setColor(COLORS.black)
-    love.graphics.polygon("fill", x + 29, y + h - 1, x + 35, y + h - 1, x + 32, y + h + 5)
+    love.graphics.polygon("fill", x + 28, y + h - 1, x + 34, y + h - 1, x + 31, y + h + 5)
 
     love.graphics.setFont(self.fonts.small)
+    setColor(COLORS.black)
     love.graphics.printf(self.enemyDialogue, x + 5, y + 7, w - 10, "center")
 
-    local position = BATTLE_POSITIONS[self.targetedParty]
+    local positions = getPartyPositions(#self.party)
+    local position = positions[self.targetedParty] or positions[1]
     setColor(COLORS.red, 0.7 + math.sin(self.enemyDialogueTimer * 12) * 0.3)
     love.graphics.polygon(
         "fill",
@@ -546,7 +562,9 @@ function Battle:drawEnemyDialogue()
 end
 
 function Battle:drawResult()
-    if self.state ~= "RESULT" then return end
+    if self.state ~= "RESULT" then
+        return
+    end
 
     setColor({0, 0, 0, 0.88})
     love.graphics.rectangle("fill", 0, 0, SW, SH)
@@ -555,18 +573,24 @@ function Battle:drawResult()
     love.graphics.printf(self.result or "Battle ended.", 30, 88, 260, "center")
 end
 
+function Battle:drawActionButtons()
+    self:drawCommandButtons()
+    self:drawDialogueBox()
+end
+
 function Battle:draw()
-    if not self.active then return end
+    if not self.active then
+        return
+    end
 
     self:drawBackground()
     self:drawBattlers()
-    self:drawEnemyInfo()
+    self:drawTensionBar()
     self:drawArena()
     self:drawAttackTiming()
     self:drawEnemyDialogue()
-    self:drawActionButtons()
     self:drawStatusBoxes()
-    self:drawTensionBar()
+    self:drawActionButtons()
     self:drawResult()
 
     if self.state == "TRANSITIONOUT" then
